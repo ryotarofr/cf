@@ -22,6 +22,19 @@ struct Block;
 #[derive(Component)]
 struct Selected;
 
+// Component to track texture state for individual blocks
+#[derive(Component)]
+struct TextureState {
+    is_special: bool,
+}
+
+// Resource to store texture handles
+#[derive(Resource)]
+struct TextureHandles {
+    normal: Handle<Image>,
+    special: Handle<Image>,
+}
+
 // Resource to store material handles
 #[derive(Resource)]
 struct BlockMaterials {
@@ -47,39 +60,45 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // Import the custom texture.
-    let custom_texture_handle: Handle<Image> = asset_server.load("array_texture.png");
-    // Create and save a handle to the mesh (shared for all blocks).
+    /// テクスチャ画像をロード
+    ///
+    /// asset_server.load() は定義した段階で非同期で読み込まれる。
+    /// 返却値の `Handle<Image>` は即座に利用可能だが、実際のデータが入っているわけではないので
+    /// 利用時は、非同期プロセスを待機している。
+    let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
+    let special_texture: Handle<Image> = asset_server.load("special_texture.png");
+    
+    /// テスクチャリソースの登録
+    ///
+    /// `TextureHandles` リソースを通じてアクセス可能
+    /// 例:
+    /// ```rust
+    /// /// special_texture.png を参照する
+    /// texture_handles.special.clone()
+    /// ```
+    /// マテリアルを切り替えるには `BlockMaterials` を使う必要があるので
+    /// ほとんどの場合で、`TextureHandles` は `BlockMaterials` と併用する。
+    commands.insert_resource(TextureHandles {
+        normal: normal_texture.clone(),
+        special: special_texture.clone(),
+    });
+    
+    /// マテリアルとメッシュの初期化
     let cube_mesh_handle: Handle<Mesh> = meshes.add(create_cube_mesh());
+    let block_materials: BlockMaterials = initialize_materials(&mut materials, &normal_texture);
+    /// マテリアルリソースを登録
+    commands.insert_resource(block_materials);
 
-    // Create material handle (shared for all blocks).
-    let material_handle = materials.add(StandardMaterial {
-        base_color_texture: Some(custom_texture_handle.clone()),
-        unlit: true, // Use unlit shading to see texture clearly
-        ..default()
-    });
-
-    // Create selected material (highlighted color)
-    let selected_material_handle = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.3, 0.7, 1.0), // Light blue for selection
-        base_color_texture: Some(custom_texture_handle),
-        unlit: true,
-        ..default()
-    });
-
-    // Store materials as a resource
-    commands.insert_resource(BlockMaterials {
-        normal: material_handle.clone(),
-        selected: selected_material_handle,
-    });
-
+    /// フィールドの床部分を作成
+    ///
     // Generate 100x100 field of blocks
     let field_size = 100;
     let block_spacing = 16.0; // Each block is 16x16x16, so we space them by 16 units
 
     for x in 0..field_size {
         for z in 0..field_size {
-            // Calculate position for each block
+            /// TODO: この辺で状態分岐を入れる 
+            /// Calculate position for each block
             let x_pos = (x as f32 - field_size as f32 / 2.0) * block_spacing;
             let z_pos = (z as f32 - field_size as f32 / 2.0) * block_spacing;
 
@@ -90,6 +109,7 @@ fn setup(
                 Transform::from_xyz(x_pos, 0.0, z_pos),
                 CustomUV,
                 Block,
+                TextureState { is_special: false },
             ));
         }
     }
@@ -121,6 +141,34 @@ fn setup(
     ));
 
     // Text to describe the controls.
+}
+
+/// マテリアルブロックの初期化
+///
+/// normal_texture・未選択の状態で初期化を行う。
+fn initialize_materials(
+       materials: &mut ResMut<Assets<StandardMaterial>>,
+       normal_texture: &Handle<Image>,
+   ) -> BlockMaterials {
+    // Create material handle (shared for all blocks)
+   let material_handle = materials.add(StandardMaterial {
+       base_color_texture: Some(normal_texture.clone()),
+        unlit: true, // Use unlit shading to see texture clearly
+       ..default()
+    });
+    // Create selected material (highlighted color)
+    // Create selected material (highlighted color)
+    let selected_material_handle = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.3, 0.7, 1.0), // Light blue for selection
+        base_color_texture: Some(normal_texture.clone()),
+        unlit: true,
+        ..default()
+    });
+         
+     BlockMaterials {
+        normal: material_handle,
+        selected: selected_material_handle,
+    }
 }
 
 // System to handle camera zoom with mouse wheel
@@ -157,12 +205,15 @@ fn block_selection(
             Entity,
             &GlobalTransform,
             &mut MeshMaterial3d<StandardMaterial>,
+            &mut TextureState,
         ),
         With<Block>,
     >,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
     materials: Res<BlockMaterials>,
+    texture_handles: Res<TextureHandles>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
 ) {
     if !mouse_input.just_pressed(MouseButton::Left) {
         return;
@@ -189,7 +240,7 @@ fn block_selection(
     let mut closest_block = None;
     let mut closest_distance = f32::MAX;
 
-    for (entity, block_transform, _) in block_query.iter() {
+    for (entity, block_transform, _, _) in block_query.iter() {
         // Simple AABB intersection test for cube
         let block_pos = block_transform.translation();
         let half_size = 8.0; // Half of block size (16/2)
@@ -206,16 +257,33 @@ fn block_selection(
     // Clear previous selection
     for selected_entity in selected_query.iter() {
         commands.entity(selected_entity).remove::<Selected>();
-        if let Ok((_, _, mut material)) = block_query.get_mut(selected_entity) {
+        if let Ok((_, _, mut material, texture_state)) = block_query.get_mut(selected_entity) {
             material.0 = materials.normal.clone();
         }
     }
 
-    // Apply new selection
+    // Apply new selection and toggle texture
     if let Some(selected_entity) = closest_block {
         commands.entity(selected_entity).insert(Selected);
-        if let Ok((_, _, mut material)) = block_query.get_mut(selected_entity) {
-            material.0 = materials.selected.clone();
+        if let Ok((_, _, mut material, mut texture_state)) = block_query.get_mut(selected_entity) {
+            // Toggle texture state
+            texture_state.is_special = !texture_state.is_special;
+            
+            // Create new material with appropriate texture
+            let new_texture = if texture_state.is_special {
+                texture_handles.special.clone()
+            } else {
+                texture_handles.normal.clone()
+            };
+            
+            let new_material = material_assets.add(StandardMaterial {
+                base_color: Color::srgb(0.3, 0.7, 1.0), // Selection color
+                base_color_texture: Some(new_texture),
+                unlit: true,
+                ..default()
+            });
+            
+            material.0 = new_material;
         }
     }
 }
