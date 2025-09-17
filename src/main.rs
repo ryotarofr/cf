@@ -37,7 +37,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_zoom, block_selection, fox_movement, camera_follow_fox))
+        .add_systems(Update, (camera_zoom, block_selection))
         .run();
 }
 
@@ -237,90 +237,6 @@ fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Op
         Some(t_enter.max(0.0))
     } else {
         None
-    }
-}
-
-// System to handle Fox movement with WASD keys
-fn fox_movement(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut fox_query: Query<&mut Transform, With<Fox>>,
-    time: Res<Time>,
-) {
-    if let Ok(mut transform) = fox_query.single_mut() {
-        let speed = 100.0 * time.delta_secs(); // Movement speed
-        let mut movement = Vec3::ZERO;
-        let mut should_rotate = false;
-        let mut target_rotation = Quat::IDENTITY;
-
-        // Check for keyboard input and calculate movement and rotation
-        // Note: Fox model faces backward by default, so we add PI to all rotations
-        if keyboard_input.just_pressed(KeyCode::KeyW) {
-            target_rotation = Quat::from_rotation_y(std::f32::consts::PI); // Face forward
-            should_rotate = true;
-        } else if keyboard_input.just_pressed(KeyCode::KeyS) {
-            target_rotation = Quat::from_rotation_y(0.0); // Face backward
-            should_rotate = true;
-        } else if keyboard_input.just_pressed(KeyCode::KeyA) {
-            target_rotation = Quat::from_rotation_y(-std::f32::consts::PI / 2.0); // Face left
-            should_rotate = true;
-        } else if keyboard_input.just_pressed(KeyCode::KeyD) {
-            target_rotation = Quat::from_rotation_y(std::f32::consts::PI / 2.0); // Face right
-            should_rotate = true;
-        }
-
-        // Apply instant rotation when direction key is pressed
-        if should_rotate {
-            let scale = transform.scale;
-            transform.rotation = target_rotation;
-            transform.scale = scale;
-        }
-
-        // Move in the direction Fox is facing
-        if keyboard_input.pressed(KeyCode::KeyW) {
-            movement.z -= speed;
-        }
-        if keyboard_input.pressed(KeyCode::KeyS) {
-            movement.z += speed;
-        }
-        if keyboard_input.pressed(KeyCode::KeyA) {
-            movement.x -= speed;
-        }
-        if keyboard_input.pressed(KeyCode::KeyD) {
-            movement.x += speed;
-        }
-
-        // Apply movement
-        if movement.length() > 0.0 {
-            transform.translation += movement;
-        }
-    }
-}
-
-// System to make camera follow Fox
-fn camera_follow_fox(
-    fox_query: Query<&Transform, (With<Fox>, Without<MainCamera>)>,
-    mut camera_query: Query<&mut Transform, (With<MainCamera>, Without<Fox>)>,
-    time: Res<Time>,
-) {
-    if let Ok(fox_transform) = fox_query.single() {
-        if let Ok(mut camera_transform) = camera_query.single_mut() {
-            let fox_position = fox_transform.translation;
-            
-            // Fixed camera position: always behind Fox relative to world coordinates
-            // W key moves Fox towards -Z (north), so camera is positioned at +Z (south) relative to Fox
-            let camera_offset = Vec3::new(0.0, 100.0, 150.0); // Behind Fox in world space
-            let target_position = fox_position + camera_offset;
-            
-            // Smoothly interpolate camera position
-            camera_transform.translation = camera_transform.translation.lerp(
-                target_position,
-                5.0 * time.delta_secs()
-            );
-            
-            // Camera always looks towards -Z (north) direction, same as W key direction
-            let look_at_position = fox_position + Vec3::new(0.0, 20.0, -100.0); // Look towards north from Fox
-            camera_transform.look_at(look_at_position, Vec3::Y);
-        }
     }
 }
 
