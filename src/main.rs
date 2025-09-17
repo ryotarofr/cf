@@ -22,6 +22,19 @@ struct Block;
 #[derive(Component)]
 struct Selected;
 
+// Component to track texture state for individual blocks
+#[derive(Component)]
+struct TextureState {
+    is_special: bool,
+}
+
+// Resource to store texture handles
+#[derive(Resource)]
+struct TextureHandles {
+    normal: Handle<Image>,
+    special: Handle<Image>,
+}
+
 // Resource to store material handles
 #[derive(Resource)]
 struct BlockMaterials {
@@ -47,8 +60,18 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // Import the custom texture.
-    let custom_texture_handle: Handle<Image> = asset_server.load("array_texture.png");
+    // Import multiple textures
+    let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
+    let special_texture: Handle<Image> = asset_server.load("special_texture.png");
+    
+    // Store texture handles as a resource
+    commands.insert_resource(TextureHandles {
+        normal: normal_texture.clone(),
+        special: special_texture.clone(),
+    });
+    
+    // Choose texture based on condition (example: use normal texture by default)
+    let custom_texture_handle = normal_texture.clone();
     // Create and save a handle to the mesh (shared for all blocks).
     let cube_mesh_handle: Handle<Mesh> = meshes.add(create_cube_mesh());
 
@@ -90,6 +113,7 @@ fn setup(
                 Transform::from_xyz(x_pos, 0.0, z_pos),
                 CustomUV,
                 Block,
+                TextureState { is_special: false },
             ));
         }
     }
@@ -157,12 +181,15 @@ fn block_selection(
             Entity,
             &GlobalTransform,
             &mut MeshMaterial3d<StandardMaterial>,
+            &mut TextureState,
         ),
         With<Block>,
     >,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
     materials: Res<BlockMaterials>,
+    texture_handles: Res<TextureHandles>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
 ) {
     if !mouse_input.just_pressed(MouseButton::Left) {
         return;
@@ -189,7 +216,7 @@ fn block_selection(
     let mut closest_block = None;
     let mut closest_distance = f32::MAX;
 
-    for (entity, block_transform, _) in block_query.iter() {
+    for (entity, block_transform, _, _) in block_query.iter() {
         // Simple AABB intersection test for cube
         let block_pos = block_transform.translation();
         let half_size = 8.0; // Half of block size (16/2)
@@ -206,16 +233,33 @@ fn block_selection(
     // Clear previous selection
     for selected_entity in selected_query.iter() {
         commands.entity(selected_entity).remove::<Selected>();
-        if let Ok((_, _, mut material)) = block_query.get_mut(selected_entity) {
+        if let Ok((_, _, mut material, texture_state)) = block_query.get_mut(selected_entity) {
             material.0 = materials.normal.clone();
         }
     }
 
-    // Apply new selection
+    // Apply new selection and toggle texture
     if let Some(selected_entity) = closest_block {
         commands.entity(selected_entity).insert(Selected);
-        if let Ok((_, _, mut material)) = block_query.get_mut(selected_entity) {
-            material.0 = materials.selected.clone();
+        if let Ok((_, _, mut material, mut texture_state)) = block_query.get_mut(selected_entity) {
+            // Toggle texture state
+            texture_state.is_special = !texture_state.is_special;
+            
+            // Create new material with appropriate texture
+            let new_texture = if texture_state.is_special {
+                texture_handles.special.clone()
+            } else {
+                texture_handles.normal.clone()
+            };
+            
+            let new_material = material_assets.add(StandardMaterial {
+                base_color: Color::srgb(0.3, 0.7, 1.0), // Selection color
+                base_color_texture: Some(new_texture),
+                unlit: true,
+                ..default()
+            });
+            
+            material.0 = new_material;
         }
     }
 }
@@ -323,6 +367,7 @@ fn camera_follow_fox(
         }
     }
 }
+
 
 #[rustfmt::skip]
 fn create_cube_mesh() -> Mesh {
