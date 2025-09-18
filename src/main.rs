@@ -54,6 +54,7 @@ fn main() {
         .run();
 }
 
+#[allow(unused_doc_comments)]
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -67,7 +68,7 @@ fn setup(
     /// 利用時は、非同期プロセスを待機している。
     let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
     let special_texture: Handle<Image> = asset_server.load("special_texture.png");
-    
+
     /// テスクチャリソースの登録
     ///
     /// `TextureHandles` リソースを通じてアクセス可能
@@ -82,10 +83,26 @@ fn setup(
         normal: normal_texture.clone(),
         special: special_texture.clone(),
     });
-    
+
     /// マテリアルとメッシュの初期化
+    let material_handle = materials.add(StandardMaterial {
+        base_color_texture: Some(normal_texture.clone()),
+        unlit: true, // Use unlit shading to see texture clearly
+        ..default()
+    });
+    // Create selected material (highlighted color)
+    // Create selected material (highlighted color)
+    let selected_material_handle = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.3, 0.7, 1.0), // Light blue for selection
+        base_color_texture: Some(normal_texture.clone()),
+        unlit: true,
+        ..default()
+    });
     let cube_mesh_handle: Handle<Mesh> = meshes.add(create_cube_mesh());
-    let block_materials: BlockMaterials = initialize_materials(&mut materials, &normal_texture);
+    let block_materials = BlockMaterials {
+        normal: material_handle,
+        selected: selected_material_handle,
+    };
     /// マテリアルリソースを登録
     commands.insert_resource(block_materials);
 
@@ -95,9 +112,14 @@ fn setup(
     let field_size = 100;
     let block_spacing = 16.0; // Each block is 16x16x16, so we space them by 16 units
 
+    let material_handle = materials.add(StandardMaterial {
+        base_color_texture: Some(normal_texture.clone()),
+        unlit: true, // Use unlit shading to see texture clearly
+        ..default()
+    });
     for x in 0..field_size {
         for z in 0..field_size {
-            /// TODO: この辺で状態分岐を入れる 
+            /// TODO: この辺で状態分岐を入れる
             /// Calculate position for each block
             let x_pos = (x as f32 - field_size as f32 / 2.0) * block_spacing;
             let z_pos = (z as f32 - field_size as f32 / 2.0) * block_spacing;
@@ -143,34 +165,6 @@ fn setup(
     // Text to describe the controls.
 }
 
-/// マテリアルブロックの初期化
-///
-/// normal_texture・未選択の状態で初期化を行う。
-fn initialize_materials(
-       materials: &mut ResMut<Assets<StandardMaterial>>,
-       normal_texture: &Handle<Image>,
-   ) -> BlockMaterials {
-    // Create material handle (shared for all blocks)
-   let material_handle = materials.add(StandardMaterial {
-       base_color_texture: Some(normal_texture.clone()),
-        unlit: true, // Use unlit shading to see texture clearly
-       ..default()
-    });
-    // Create selected material (highlighted color)
-    // Create selected material (highlighted color)
-    let selected_material_handle = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.3, 0.7, 1.0), // Light blue for selection
-        base_color_texture: Some(normal_texture.clone()),
-        unlit: true,
-        ..default()
-    });
-         
-     BlockMaterials {
-        normal: material_handle,
-        selected: selected_material_handle,
-    }
-}
-
 // System to handle camera zoom with mouse wheel
 fn camera_zoom(
     mut wheel_events: EventReader<bevy::input::mouse::MouseWheel>,
@@ -196,6 +190,7 @@ fn camera_zoom(
 }
 
 // System to handle block selection with mouse clicks
+#[allow(clippy::too_many_arguments)]
 fn block_selection(
     mouse_input: Res<ButtonInput<MouseButton>>,
     window_query: Query<&Window, With<PrimaryWindow>>,
@@ -246,18 +241,18 @@ fn block_selection(
         let half_size = 8.0; // Half of block size (16/2)
 
         // Check if ray intersects with block's bounding box
-        if let Some(distance) = ray_box_intersection(&ray, block_pos, Vec3::splat(half_size)) {
-            if distance < closest_distance {
-                closest_distance = distance;
-                closest_block = Some(entity);
-            }
+        if let Some(distance) = ray_box_intersection(&ray, block_pos, Vec3::splat(half_size))
+            .filter(|&distance| distance < closest_distance)
+        {
+            closest_distance = distance;
+            closest_block = Some(entity);
         }
     }
 
     // Clear previous selection
     for selected_entity in selected_query.iter() {
         commands.entity(selected_entity).remove::<Selected>();
-        if let Ok((_, _, mut material, texture_state)) = block_query.get_mut(selected_entity) {
+        if let Ok((_, _, mut material, _texture_state)) = block_query.get_mut(selected_entity) {
             material.0 = materials.normal.clone();
         }
     }
@@ -268,21 +263,21 @@ fn block_selection(
         if let Ok((_, _, mut material, mut texture_state)) = block_query.get_mut(selected_entity) {
             // Toggle texture state
             texture_state.is_special = !texture_state.is_special;
-            
+
             // Create new material with appropriate texture
             let new_texture = if texture_state.is_special {
                 texture_handles.special.clone()
             } else {
                 texture_handles.normal.clone()
             };
-            
+
             let new_material = material_assets.add(StandardMaterial {
                 base_color: Color::srgb(0.3, 0.7, 1.0), // Selection color
                 base_color_texture: Some(new_texture),
                 unlit: true,
                 ..default()
             });
-            
+
             material.0 = new_material;
         }
     }
