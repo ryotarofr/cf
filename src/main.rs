@@ -48,11 +48,25 @@ struct BlockMaterials {
 #[derive(Component)]
 struct Fox;
 
+// Component to track Fox's internal timer
+#[derive(Component)]
+struct FoxTimer {
+    time: f32,
+}
+
+// Marker component for UI text
+#[derive(Component)]
+struct TimerText;
+
+// Marker component for click feedback text
+#[derive(Component)]
+struct ClickFeedbackText;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_zoom, block_selection))
+        .add_systems(Update, (camera_zoom, block_selection, update_fox_timer, update_timer_ui))
         .run();
 }
 
@@ -144,6 +158,7 @@ fn setup(
         Transform::from_xyz(0.0, 8.0, 0.0) // Position at center, on top of blocks (y = 8.0)
             .with_scale(Vec3::splat(0.2)), // Scale to match block size (16x16x16)
         Fox,
+        FoxTimer { time: 0.0 },
     ));
 
     // Transform for the camera and lighting, looking at center of the field.
@@ -164,7 +179,29 @@ fn setup(
         camera_and_light_transform,
     ));
 
-    // Text to describe the controls.
+    // Add UI text to display Fox timer
+    commands.spawn((
+        Text::new("Fox Timer: 0.0s"),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        TimerText,
+    ));
+
+    // Add click feedback text
+    commands.spawn((
+        Text::new(""),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(40.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        ClickFeedbackText,
+    ));
 }
 
 // System to handle camera zoom with mouse wheel
@@ -206,6 +243,9 @@ fn block_selection(
         ),
         With<Block>,
     >,
+    fox_query: Query<(Entity, &GlobalTransform), With<Fox>>,
+    mut fox_timer_query: Query<&mut FoxTimer, With<Fox>>,
+    mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
     materials: Res<BlockMaterials>,
@@ -233,10 +273,11 @@ fn block_selection(
         return;
     };
 
-    // Find the closest block that the ray hits
-    let mut closest_block = None;
+    // Find the closest object that the ray hits (blocks or fox)
+    let mut closest_entity = None;
     let mut closest_distance = f32::MAX;
 
+    // Check blocks
     for (entity, block_transform, _, _) in block_query.iter() {
         // Simple AABB intersection test for cube
         let block_pos = block_transform.translation();
@@ -247,7 +288,21 @@ fn block_selection(
             .filter(|&distance| distance < closest_distance)
         {
             closest_distance = distance;
-            closest_block = Some(entity);
+            closest_entity = Some(entity);
+        }
+    }
+
+    // Check fox
+    for (entity, fox_transform) in fox_query.iter() {
+        let fox_pos = fox_transform.translation();
+        let fox_half_size = 5.0; // Approximate fox bounding box size
+
+        // Check if ray intersects with fox's bounding box
+        if let Some(distance) = ray_box_intersection(&ray, fox_pos, Vec3::splat(fox_half_size))
+            .filter(|&distance| distance < closest_distance)
+        {
+            closest_distance = distance;
+            closest_entity = Some(entity);
         }
     }
 
@@ -259,9 +314,27 @@ fn block_selection(
         }
     }
 
-    // Apply new selection and toggle texture
-    if let Some(selected_entity) = closest_block {
+    // Apply new selection
+    if let Some(selected_entity) = closest_entity {
         commands.entity(selected_entity).insert(Selected);
+
+        // Check if it's a fox and reset timer
+        if fox_query.get(selected_entity).is_ok() {
+            if let Ok(mut fox_timer) = fox_timer_query.get_mut(selected_entity) {
+                fox_timer.time = 0.0;
+                // Show click feedback
+                if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                    feedback_text.0 = "Fox clicked! Timer reset!".to_string();
+                }
+            }
+        } else {
+            // Clear feedback if clicking something else
+            if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                feedback_text.0 = "".to_string();
+            }
+        }
+
+        // Check if it's a block and handle texture switching
         if let Ok((_, _, mut material, mut texture_state)) = block_query.get_mut(selected_entity) {
             // テクスチャの切り替え
             // ブロックごとに状態を持っている。
@@ -303,5 +376,27 @@ fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Op
         Some(t_enter.max(0.0))
     } else {
         None
+    }
+}
+
+// System to update Fox timer
+fn update_fox_timer(
+    time: Res<Time>,
+    mut fox_query: Query<&mut FoxTimer, With<Fox>>,
+) {
+    for mut timer in fox_query.iter_mut() {
+        timer.time += time.delta_secs();
+    }
+}
+
+// System to update timer UI
+fn update_timer_ui(
+    fox_query: Query<&FoxTimer, With<Fox>>,
+    mut text_query: Query<&mut Text, With<TimerText>>,
+) {
+    if let Ok(fox_timer) = fox_query.single() {
+        if let Ok(mut text) = text_query.single_mut() {
+            text.0 = format!("Fox Timer: {:.1}s", fox_timer.time);
+        }
     }
 }
