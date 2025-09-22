@@ -52,12 +52,13 @@ struct ClickFeedbackText;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, cf_mesh::item_box::setup_item_box))
         .add_systems(
             Update,
             (
                 camera_zoom,
                 block_selection,
+                cf_mesh::item_box::item_box_button_system,
                 cf_tool::timer::update_timers,
                 cf_tool::timer::update_timer_ui,
             ),
