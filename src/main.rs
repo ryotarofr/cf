@@ -48,10 +48,11 @@ struct BlockMaterials {
 #[derive(Component)]
 struct Fox;
 
-// Component to track Fox's internal timer
+// Generic component to track object's internal timer
 #[derive(Component)]
-struct FoxTimer {
+struct Timer {
     time: f32,
+    name: String,
 }
 
 // Marker component for UI text
@@ -66,7 +67,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_zoom, block_selection, update_fox_timer, update_timer_ui))
+        .add_systems(Update, (camera_zoom, block_selection, update_timers, update_timer_ui))
         .run();
 }
 
@@ -158,7 +159,7 @@ fn setup(
         Transform::from_xyz(0.0, 8.0, 0.0) // Position at center, on top of blocks (y = 8.0)
             .with_scale(Vec3::splat(0.2)), // Scale to match block size (16x16x16)
         Fox,
-        FoxTimer { time: 0.0 },
+        Timer { time: 0.0, name: "Fox".to_string() },
     ));
 
     // Transform for the camera and lighting, looking at center of the field.
@@ -244,7 +245,7 @@ fn block_selection(
         With<Block>,
     >,
     fox_query: Query<(Entity, &GlobalTransform), With<Fox>>,
-    mut fox_timer_query: Query<&mut FoxTimer, With<Fox>>,
+    mut timer_query: Query<&mut Timer>,
     mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
@@ -318,17 +319,15 @@ fn block_selection(
     if let Some(selected_entity) = closest_entity {
         commands.entity(selected_entity).insert(Selected);
 
-        // Check if it's a fox and reset timer
-        if fox_query.get(selected_entity).is_ok() {
-            if let Ok(mut fox_timer) = fox_timer_query.get_mut(selected_entity) {
-                fox_timer.time = 0.0;
-                // Show click feedback
-                if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
-                    feedback_text.0 = "Fox clicked! Timer reset!".to_string();
-                }
+        // Check if entity has a timer and reset it
+        if let Ok(mut timer) = timer_query.get_mut(selected_entity) {
+            timer.time = 0.0;
+            // Show click feedback
+            if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                feedback_text.0 = format!("{} clicked! Timer reset!", timer.name);
             }
         } else {
-            // Clear feedback if clicking something else
+            // Clear feedback if clicking something without a timer
             if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
                 feedback_text.0 = "".to_string();
             }
@@ -379,24 +378,32 @@ fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Op
     }
 }
 
-// System to update Fox timer
-fn update_fox_timer(
+// System to update all timers
+fn update_timers(
     time: Res<Time>,
-    mut fox_query: Query<&mut FoxTimer, With<Fox>>,
+    mut timer_query: Query<&mut Timer>,
 ) {
-    for mut timer in fox_query.iter_mut() {
+    for mut timer in timer_query.iter_mut() {
         timer.time += time.delta_secs();
     }
 }
 
 // System to update timer UI
 fn update_timer_ui(
-    fox_query: Query<&FoxTimer, With<Fox>>,
+    timer_query: Query<&Timer>,
     mut text_query: Query<&mut Text, With<TimerText>>,
 ) {
-    if let Ok(fox_timer) = fox_query.single() {
-        if let Ok(mut text) = text_query.single_mut() {
-            text.0 = format!("Fox Timer: {:.1}s", fox_timer.time);
+    if let Ok(mut text) = text_query.single_mut() {
+        let mut timer_text = String::new();
+        for timer in timer_query.iter() {
+            if !timer_text.is_empty() {
+                timer_text.push_str(", ");
+            }
+            timer_text.push_str(&format!("{}: {:.1}s", timer.name, timer.time));
         }
+        if timer_text.is_empty() {
+            timer_text = "No timers".to_string();
+        }
+        text.0 = timer_text;
     }
 }
