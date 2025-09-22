@@ -1,10 +1,7 @@
 mod cf_mesh;
+mod cf_tool;
 
-use bevy::{
-    prelude::*,
-    render::{mesh::Indices, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
-    window::PrimaryWindow,
-};
+use bevy::{prelude::*, window::PrimaryWindow};
 
 // Define a "marker" component to mark the custom mesh. Marker components are often used in Bevy for
 // filtering entities in queries with `With`, they're usually not queried directly since they don't
@@ -48,17 +45,6 @@ struct BlockMaterials {
 #[derive(Component)]
 struct Fox;
 
-// Generic component to track object's internal timer
-#[derive(Component)]
-struct Timer {
-    time: f32,
-    name: String,
-}
-
-// Marker component for UI text
-#[derive(Component)]
-struct TimerText;
-
 // Marker component for click feedback text
 #[derive(Component)]
 struct ClickFeedbackText;
@@ -67,7 +53,15 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, (camera_zoom, block_selection, update_timers, update_timer_ui))
+        .add_systems(
+            Update,
+            (
+                camera_zoom,
+                block_selection,
+                cf_tool::timer::update_timers,
+                cf_tool::timer::update_timer_ui,
+            ),
+        )
         .run();
 }
 
@@ -159,7 +153,10 @@ fn setup(
         Transform::from_xyz(0.0, 8.0, 0.0) // Position at center, on top of blocks (y = 8.0)
             .with_scale(Vec3::splat(0.2)), // Scale to match block size (16x16x16)
         Fox,
-        Timer { time: 0.0, name: "Fox".to_string() },
+        cf_tool::timer::Timer {
+            time: 0.0,
+            name: "Fox".to_string(),
+        },
     ));
 
     // Transform for the camera and lighting, looking at center of the field.
@@ -189,7 +186,7 @@ fn setup(
             left: Val::Px(10.0),
             ..default()
         },
-        TimerText,
+        cf_tool::timer::TimerText,
     ));
 
     // Add click feedback text
@@ -245,7 +242,7 @@ fn block_selection(
         With<Block>,
     >,
     fox_query: Query<(Entity, &GlobalTransform), With<Fox>>,
-    mut timer_query: Query<&mut Timer>,
+    mut timer_query: Query<&mut cf_tool::timer::Timer>,
     mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
     mut commands: Commands,
     selected_query: Query<Entity, With<Selected>>,
@@ -375,35 +372,5 @@ fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Op
         Some(t_enter.max(0.0))
     } else {
         None
-    }
-}
-
-// System to update all timers
-fn update_timers(
-    time: Res<Time>,
-    mut timer_query: Query<&mut Timer>,
-) {
-    for mut timer in timer_query.iter_mut() {
-        timer.time += time.delta_secs();
-    }
-}
-
-// System to update timer UI
-fn update_timer_ui(
-    timer_query: Query<&Timer>,
-    mut text_query: Query<&mut Text, With<TimerText>>,
-) {
-    if let Ok(mut text) = text_query.single_mut() {
-        let mut timer_text = String::new();
-        for timer in timer_query.iter() {
-            if !timer_text.is_empty() {
-                timer_text.push_str(", ");
-            }
-            timer_text.push_str(&format!("{}: {:.1}s", timer.name, timer.time));
-        }
-        if timer_text.is_empty() {
-            timer_text = "No timers".to_string();
-        }
-        text.0 = timer_text;
     }
 }
