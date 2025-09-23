@@ -68,6 +68,7 @@ pub fn item_box_button_system(
 pub fn setup_item_box(mut commands: Commands) {
     // Initialize item box resources
     // memo: is_visible は初表示の状態のこと。 false なら非表示
+    // TODO: items は DB から取得。insert_resourceが同期処理なのでロードに時間かかる？
     commands.insert_resource(ItemBoxState { is_visible: false });
     commands.insert_resource(ItemBox {
         items: vec![
