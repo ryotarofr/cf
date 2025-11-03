@@ -45,6 +45,9 @@ struct BlockMaterials {
 #[derive(Component)]
 struct Fox;
 
+#[derive(Component)]
+struct Tree;
+
 // Marker component for click feedback text
 #[derive(Component)]
 struct ClickFeedbackText;
@@ -159,6 +162,16 @@ fn setup(
             name: "Fox".to_string(),
         },
     ));
+    commands.spawn((
+        SceneRoot(asset_server.load("animated/tree/TR_01_autumn.glb#Scene0")),
+        Transform::from_xyz(24.0, 8.0, 0.0) // Position at center, on top of blocks (y = 8.0)
+            .with_scale(Vec3::splat(20.0)), // Increase scale to make it more visible
+        Tree,
+        cf_tool::timer::Timer {
+            time: 0.0,
+            name: "Tree".to_string(),
+        },
+    ));
 
     // Transform for the camera and lighting, looking at center of the field.
     // Position camera higher and further to see the entire field
@@ -190,6 +203,17 @@ fn setup(
         cf_tool::timer::TimerText,
     ));
 
+    // commands.spawn((
+    //     Text::new("Tree Timer: 0.0s"),
+    //     Node {
+    //         position_type: PositionType::Absolute,
+    //         top: Val::Px(20.0),
+    //         left: Val::Px(20.0),
+    //         ..default()
+    //     },
+    //     cf_tool::timer::TimerText,
+    // ));
+
     // Add click feedback text
     commands.spawn((
         Text::new(""),
@@ -205,7 +229,7 @@ fn setup(
 
 // System to handle camera zoom with mouse wheel
 fn camera_zoom(
-    mut wheel_events: EventReader<bevy::input::mouse::MouseWheel>,
+    mut wheel_events: MessageReader<bevy::input::mouse::MouseWheel>,
     mut camera_query: Query<&mut Transform, With<MainCamera>>,
 ) {
     for event in wheel_events.read() {

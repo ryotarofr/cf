@@ -8,10 +8,7 @@ pub struct Timer {
 }
 
 // System to update all timers
-pub fn update_timers(
-    time: Res<Time>,
-    mut timer_query: Query<&mut Timer>,
-) {
+pub fn update_timers(time: Res<Time>, mut timer_query: Query<&mut Timer>) {
     for mut timer in timer_query.iter_mut() {
         timer.time += time.delta_secs();
     }

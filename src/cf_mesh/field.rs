@@ -1,7 +1,5 @@
-use bevy::{
-    prelude::*,
-    render::{mesh::Indices, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
-};
+use bevy::{asset::RenderAssetUsages, prelude::*, render::render_resource::PrimitiveTopology};
+use bevy_mesh::*;
 
 #[rustfmt::skip]
 pub fn create_cube_mesh() -> Mesh {
