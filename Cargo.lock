@@ -4156,6 +4156,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_mesh",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
