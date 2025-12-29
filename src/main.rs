@@ -57,7 +57,7 @@ struct ItemSlot {
     item: Option<ItemType>,
 }
 
-// アイテムスロットのアイコン表示用コンポーネント
+// アイテムスロットのアイコン表示用コンポーネント（画像用）
 #[derive(Component)]
 struct ItemSlotIcon;
 
@@ -229,6 +229,8 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    // アイテムアイコン画像をプリロード
+    let fox_icon: Handle<Image> = asset_server.load("animated/Fox_img_512x512.png");
     /// テクスチャ画像をロード
     ///
     /// asset_server.load() は定義した段階で非同期で読み込まれる。
@@ -348,11 +350,11 @@ fn setup(
     ));
 
     // アイテムエリアを画面中央下部に追加
-    spawn_item_area(&mut commands);
+    spawn_item_area(&mut commands, fox_icon);
 }
 
 // アイテムエリアUIをスポーンする関数
-fn spawn_item_area(commands: &mut Commands) {
+fn spawn_item_area(commands: &mut Commands, fox_icon: Handle<Image>) {
     commands
         .spawn((
             Node {
@@ -398,14 +400,18 @@ fn spawn_item_area(commands: &mut Commands) {
                         Button,
                     ))
                     .with_children(|parent| {
-                        // アイテムアイコンを表示（中央）
+                        // アイテムアイコンを表示（画像）
                         parent.spawn((
-                            Text::new(""),
-                            TextFont {
-                                font_size: 24.0,
+                            ImageNode {
+                                image: fox_icon.clone(),
                                 ..default()
                             },
-                            TextColor(Color::WHITE),
+                            Node {
+                                width: Val::Px(40.0),
+                                height: Val::Px(40.0),
+                                ..default()
+                            },
+                            Visibility::Hidden, // 初期状態では非表示
                             ItemSlotIcon,
                         ));
                         // スロット番号を表示
@@ -1543,16 +1549,16 @@ fn spawn_settings_menu(commands: &mut Commands, settings: &CameraSettings) {
 // アイテムスロットの表示を更新するシステム
 fn update_item_slot_display(
     slot_query: Query<(&ItemSlot, &Children), Changed<ItemSlot>>,
-    mut icon_query: Query<&mut Text, With<ItemSlotIcon>>,
+    mut icon_query: Query<&mut Visibility, With<ItemSlotIcon>>,
 ) {
     for (slot, children) in slot_query.iter() {
         // ItemSlotIconを持つ子エンティティを探す
         for child in children.iter() {
-            if let Ok(mut text) = icon_query.get_mut(child) {
-                // アイテムの種類に応じてアイコンを表示
-                text.0 = match &slot.item {
-                    Some(ItemType::Fox) => "🦊".to_string(),
-                    None => "".to_string(),
+            if let Ok(mut visibility) = icon_query.get_mut(child) {
+                // アイテムの有無に応じて画像の可視性を制御
+                *visibility = match &slot.item {
+                    Some(ItemType::Fox) => Visibility::Visible,
+                    None => Visibility::Hidden,
                 };
                 break;
             }
