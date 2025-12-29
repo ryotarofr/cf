@@ -214,6 +214,7 @@ fn main() {
                 handle_fox_action_buttons,
                 fox_follow_cursor,
                 update_item_slot_display,
+                update_item_slot_highlight,
                 handle_item_slot_click,
                 cf_tool::timer::update_timers,
                 cf_tool::timer::update_timer_ui,
@@ -1137,9 +1138,12 @@ fn handle_fox_action_buttons(
                 FoxActionButton::Box => {
                     // キツネをアイテムエリアに格納
                     if let Ok(fox_entity) = fox_query.single() {
-                        // 空いているアイテムスロットを探す
+                        // 空いているアイテムスロットを探す（若い番号から優先）
+                        let mut slots: Vec<_> = item_slot_query.iter_mut().collect();
+                        slots.sort_by_key(|slot| slot.slot_index);
+
                         let mut stored = false;
-                        for mut slot in item_slot_query.iter_mut() {
+                        for mut slot in slots {
                             if slot.item.is_none() {
                                 slot.item = Some(ItemType::Fox);
                                 // キツネエンティティを非表示にする
@@ -1563,6 +1567,27 @@ fn update_item_slot_display(
                 break;
             }
         }
+    }
+}
+
+// アイテムスロットのハイライト表示を更新するシステム
+fn update_item_slot_highlight(
+    mut slot_query: Query<(&ItemSlot, &mut BorderColor)>,
+    selected_slot: Res<SelectedItemSlot>,
+) {
+    for (slot, mut border_color) in slot_query.iter_mut() {
+        // 選択されているスロットかチェック
+        let is_selected = selected_slot
+            .slot_index
+            .map(|idx| idx == slot.slot_index)
+            .unwrap_or(false);
+
+        // ボーダーカラーを更新
+        *border_color = if is_selected {
+            BorderColor::all(Color::srgb(1.0, 0.8, 0.0)) // 明るい黄色（選択中）
+        } else {
+            BorderColor::all(Color::srgb(0.5, 0.5, 0.5)) // 通常のグレー
+        };
     }
 }
 
