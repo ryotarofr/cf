@@ -16,6 +16,10 @@ struct CustomUV;
 #[derive(Component)]
 struct MainCamera;
 
+// 太陽光のマーカーコンポーネント
+#[derive(Component)]
+struct SunLight;
+
 // ブロックをマークするコンポーネント
 #[derive(Component)]
 struct Block;
@@ -41,6 +45,13 @@ struct Fox;
 struct RainDrop {
     velocity: Vec3,
     lifetime: f32,
+}
+
+// 天候状態を管理するリソース
+#[derive(Resource)]
+struct WeatherState {
+    is_raining: bool,
+    time_until_change: f32, // 次の天候変化までの時間（秒）
 }
 
 // クリックフィードバックテキストのマーカーコンポーネント
@@ -189,6 +200,9 @@ fn load_or_default_settings() -> CameraSettings {
 }
 
 fn main() {
+    use rand::Rng;
+    let mut rng = rand::rng();
+
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<MouseDragState>()
@@ -196,6 +210,10 @@ fn main() {
         .init_resource::<FoxMoveMode>()
         .init_resource::<SelectedItemSlot>()
         .insert_resource(load_or_default_settings())
+        .insert_resource(WeatherState {
+            is_raining: false,
+            time_until_change: rng.random_range(30.0..120.0), // 最初は30秒〜2分後に天候変化
+        })
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -214,6 +232,7 @@ fn main() {
                 update_item_slot_display,
                 update_item_slot_highlight,
                 handle_item_slot_click,
+                update_weather,
                 spawn_rain,
                 update_rain,
                 cf_tool::timer::update_timers,
@@ -237,7 +256,7 @@ fn setup(
     /// asset_server.load() は定義した段階で非同期で読み込まれる。
     /// 返却値の `Handle<Image>` は即座に利用可能だが、実際のデータが入っているわけではないので
     /// 利用時は、非同期プロセスを待機している。
-    let normal_texture: Handle<Image> = asset_server.load("farmland_texture.png");
+    let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
 
     /// マテリアルとメッシュの初期化
     // 選択可能なブロック用のマテリアル（明るい緑色）
@@ -316,14 +335,20 @@ fn setup(
     // 3D空間のカメラ
     commands.spawn((Camera3d::default(), camera_and_light_transform, MainCamera));
 
-    // より広いエリアのために強い光でシーンを照らす
+    // 太陽光のようなディレクショナルライト（平行光線）でフィールド全体を照らす
     commands.spawn((
-        PointLight {
-            intensity: 10000000.0,
-            range: 5000.0,
+        DirectionalLight {
+            illuminance: 30000.0,  // 明るい太陽光（ルクス単位）
+            shadows_enabled: true, // 影を有効化
             ..default()
         },
-        camera_and_light_transform,
+        Transform::from_rotation(Quat::from_euler(
+            bevy::math::EulerRot::XYZ,
+            -std::f32::consts::FRAC_PI_4, // 45度下向き
+            std::f32::consts::FRAC_PI_4,  // 45度回転
+            0.0,
+        )),
+        SunLight, // 太陽光マーカー
     ));
 
     // Foxタイマーを表示するUIテキストを追加
@@ -1528,19 +1553,66 @@ fn handle_item_slot_click(
     }
 }
 
+// 天候状態を更新するシステム
+fn update_weather(
+    mut weather: ResMut<WeatherState>,
+    time: Res<Time>,
+    mut sun_query: Query<&mut DirectionalLight, With<SunLight>>,
+) {
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    // 次の天候変化までの時間を減らす
+    weather.time_until_change -= time.delta_secs();
+
+    // 天候変化のタイミングが来た場合
+    if weather.time_until_change <= 0.0 {
+        weather.is_raining = !weather.is_raining;
+
+        // 次の変化までの時間を設定
+        weather.time_until_change = if weather.is_raining {
+            // 雨が降り始めた場合：30秒〜3分間降る
+            rng.random_range(30.0..180.0)
+        } else {
+            // 晴れになった場合：1分〜5分間晴れる
+            rng.random_range(60.0..300.0)
+        };
+
+        // 太陽光の明るさを調整
+        if let Ok(mut sun_light) = sun_query.single_mut() {
+            sun_light.illuminance = if weather.is_raining {
+                8000.0 // 雨の時は暗く（曇り空）
+            } else {
+                30000.0 // 晴れの時は明るく（晴天）
+            };
+        }
+
+        println!(
+            "天候変化: {} (次の変化まで: {:.1}秒)",
+            if weather.is_raining { "雨" } else { "晴れ" },
+            weather.time_until_change
+        );
+    }
+}
+
 // 雨粒を生成するシステム
 fn spawn_rain(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
+    weather: Res<WeatherState>,
 ) {
-    // 毎フレーム数個の雨粒を生成（ランダム性を加える）
+    // 雨が降っていない場合は何もしない
+    if !weather.is_raining {
+        return;
+    }
+
     use rand::Rng;
     let mut rng = rand::rng();
 
-    // 1秒あたり約100個の雨粒を生成（フレームレートに依存しない）
-    let spawn_rate = 100.0;
+    // 1秒あたり約150個の雨粒を生成（現実的な雨の密度）
+    let spawn_rate = 150.0;
     let drops_to_spawn = (spawn_rate * time.delta_secs()) as i32;
 
     // フィールドの範囲（9x9のブロック、各16ユニット）
