@@ -36,6 +36,13 @@ struct BlockHighlighted;
 #[derive(Component)]
 struct Fox;
 
+// 雨粒をマークするコンポーネント
+#[derive(Component)]
+struct RainDrop {
+    velocity: Vec3,
+    lifetime: f32,
+}
+
 // クリックフィードバックテキストのマーカーコンポーネント
 #[derive(Component)]
 struct ClickFeedbackText;
@@ -93,14 +100,6 @@ struct SelectedItemSlot {
     slot_index: Option<usize>,
     item_type: Option<ItemType>,
 }
-
-// Fox選択ハイライトオーバーレイのマーカーコンポーネント
-#[derive(Component)]
-struct FoxHighlight;
-
-// Foxが現在ハイライトされているかを追跡するコンポーネント
-#[derive(Component)]
-struct Highlighted;
 
 // 設定メニューの状態を追跡するリソース
 #[derive(Resource, Default)]
@@ -208,7 +207,6 @@ fn main() {
                 camera_drag_rotation,
                 camera_keyboard_rotation,
                 camera_keyboard_pan,
-                fox_hover_highlight,
                 block_hover_highlight,
                 block_click_handler,
                 handle_fox_action_buttons,
@@ -216,6 +214,8 @@ fn main() {
                 update_item_slot_display,
                 update_item_slot_highlight,
                 handle_item_slot_click,
+                spawn_rain,
+                update_rain,
                 cf_tool::timer::update_timers,
                 cf_tool::timer::update_timer_ui,
             ),
@@ -237,7 +237,7 @@ fn setup(
     /// asset_server.load() は定義した段階で非同期で読み込まれる。
     /// 返却値の `Handle<Image>` は即座に利用可能だが、実際のデータが入っているわけではないので
     /// 利用時は、非同期プロセスを待機している。
-    let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
+    let normal_texture: Handle<Image> = asset_server.load("farmland_texture.png");
 
     /// マテリアルとメッシュの初期化
     // 選択可能なブロック用のマテリアル（明るい緑色）
@@ -448,94 +448,6 @@ fn camera_zoom(
             let movement = *forward * event.y * settings.zoom_speed;
 
             transform.translation += movement;
-        }
-    }
-}
-
-// マウスがFoxの上にホバーしたときにハイライトするシステム
-#[allow(clippy::too_many_arguments)]
-fn fox_hover_highlight(
-    window_query: Query<&Window, With<PrimaryWindow>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    fox_query: Query<(Entity, &GlobalTransform), With<Fox>>,
-    mut commands: Commands,
-    highlight_query: Query<Entity, With<FoxHighlight>>,
-    highlighted_fox_query: Query<Entity, (With<Fox>, With<Highlighted>)>,
-    mut material_assets: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
-    let Ok(window) = window_query.single() else {
-        return;
-    };
-
-    let Some(cursor_position) = window.cursor_position() else {
-        // カーソルがウィンドウ内にない場合はハイライトを削除
-        for highlight_entity in highlight_query.iter() {
-            commands.entity(highlight_entity).despawn();
-        }
-        for fox_entity in highlighted_fox_query.iter() {
-            commands.entity(fox_entity).remove::<Highlighted>();
-        }
-        return;
-    };
-
-    let Ok((camera, camera_transform)) = camera_query.single() else {
-        return;
-    };
-
-    // カメラからカーソル位置を通るレイを取得
-    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
-        return;
-    };
-
-    // Foxの上にホバーしているかチェック
-    let mut hovering_fox_entity = None;
-    let mut fox_position = None;
-
-    for (entity, fox_transform) in fox_query.iter() {
-        let fox_pos = fox_transform.translation();
-        let fox_half_size = 5.0;
-
-        if ray_box_intersection(&ray, fox_pos, Vec3::splat(fox_half_size)).is_some() {
-            hovering_fox_entity = Some(entity);
-            fox_position = Some(fox_pos);
-            break;
-        }
-    }
-
-    // ホバー状態に基づいてハイライトを管理
-    let has_highlight = !highlight_query.is_empty();
-
-    if let Some(fox_entity) = hovering_fox_entity {
-        if !has_highlight {
-            // Foxの上に半透明の白いオーバーレイメッシュを追加
-            if let Some(pos) = fox_position {
-                // ハイライトオーバーレイとしてシンプルなキューブメッシュを作成
-                let highlight_material = material_assets.add(StandardMaterial {
-                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.3), // 半透明の白
-                    alpha_mode: bevy::prelude::AlphaMode::Blend,
-                    unlit: true,
-                    ..default()
-                });
-
-                // Foxの周りに少し大きめのキューブをスポーン
-                commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(12.0, 12.0, 12.0))),
-                    MeshMaterial3d(highlight_material),
-                    Transform::from_xyz(pos.x, pos.y, pos.z),
-                    FoxHighlight,
-                ));
-            }
-            // Foxをハイライト済みとしてマーク
-            commands.entity(fox_entity).insert(Highlighted);
-        }
-    } else if has_highlight {
-        // ハイライトを削除
-        for highlight_entity in highlight_query.iter() {
-            commands.entity(highlight_entity).despawn();
-        }
-        for fox_entity in highlighted_fox_query.iter() {
-            commands.entity(fox_entity).remove::<Highlighted>();
         }
     }
 }
@@ -1612,6 +1524,74 @@ fn handle_item_slot_click(
             if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
                 feedback_text.0 = format!("アイテムを選択しました: {:?}", item_type);
             }
+        }
+    }
+}
+
+// 雨粒を生成するシステム
+fn spawn_rain(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    // 毎フレーム数個の雨粒を生成（ランダム性を加える）
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    // 1秒あたり約100個の雨粒を生成（フレームレートに依存しない）
+    let spawn_rate = 100.0;
+    let drops_to_spawn = (spawn_rate * time.delta_secs()) as i32;
+
+    // フィールドの範囲（9x9のブロック、各16ユニット）
+    let field_size = 9.0 * 16.0;
+    let spawn_height = 200.0; // 高い位置から降らせる
+
+    for _ in 0..drops_to_spawn {
+        // ランダムな位置に雨粒をスポーン
+        let x = rng.random_range(-field_size / 2.0..field_size / 2.0);
+        let z = rng.random_range(-field_size / 2.0..field_size / 2.0);
+
+        // 雨粒のマテリアル（青白い半透明）
+        let rain_material = materials.add(StandardMaterial {
+            base_color: Color::srgba(0.7, 0.8, 1.0, 0.6),
+            alpha_mode: bevy::prelude::AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        });
+
+        // 雨粒のメッシュ（小さな縦長のカプセル）
+        let rain_mesh = meshes.add(Capsule3d::new(0.1, 2.0));
+
+        // 雨粒をスポーン
+        commands.spawn((
+            Mesh3d(rain_mesh),
+            MeshMaterial3d(rain_material),
+            Transform::from_xyz(x, spawn_height, z),
+            RainDrop {
+                velocity: Vec3::new(0.0, -200.0, 0.0), // 下向きに落下
+                lifetime: 5.0,                         // 5秒後に消える
+            },
+        ));
+    }
+}
+
+// 雨粒を更新するシステム
+fn update_rain(
+    mut commands: Commands,
+    mut rain_query: Query<(Entity, &mut Transform, &mut RainDrop)>,
+    time: Res<Time>,
+) {
+    for (entity, mut transform, mut raindrop) in rain_query.iter_mut() {
+        // 速度を適用
+        transform.translation += raindrop.velocity * time.delta_secs();
+
+        // ライフタイムを減らす
+        raindrop.lifetime -= time.delta_secs();
+
+        // 地面に到達したか、ライフタイムが切れた場合は削除
+        if transform.translation.y < 0.0 || raindrop.lifetime <= 0.0 {
+            commands.entity(entity).despawn();
         }
     }
 }
