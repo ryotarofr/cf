@@ -5,7 +5,21 @@ use crate::components::*;
 use crate::constants::*;
 use crate::resources::*;
 
-/// レイとボックスの交差判定のヘルパー関数
+/// レイとボックス（AABB）の交差判定を行う。
+///
+/// 3D 空間上のレイが軸に平行な境界ボックス（AABB）と交差するかを判定し、
+/// 交差する場合はレイの原点から交点までの距離を返す。
+///
+/// # Arguments
+///
+/// * `ray` - 判定対象のレイ。原点と方向を持つ。
+/// * `box_center` - ボックスの中心座標。
+/// * `half_extents` - ボックスの各軸方向の半分のサイズ。
+///
+/// # Returns
+///
+/// * `Some(f32)` - レイがボックスと交差する場合、レイの原点から交点までの距離。
+/// * `None` - レイがボックスと交差しない場合。
 pub fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Option<f32> {
     let min = box_center - half_extents;
     let max = box_center + half_extents;
@@ -25,7 +39,27 @@ pub fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -
     }
 }
 
-/// マウスがブロックの上にホバーしたときにハイライトするシステム
+/// マウスカーソルがブロックの上にホバーした際にハイライト表示を行う。
+///
+/// カーソル位置からレイキャストを行い、選択可能なブロックと交差するかを判定する。
+/// 交差したブロックに対してハイライト用の半透明キューブを表示し、
+/// 移動モードの状態に応じて色を変更する（通常時：白、移動モード時：緑）。
+///
+/// カーソルが画面外にある場合や、ホバー対象が変わった場合は
+/// 既存のハイライトを削除して新しいハイライトを生成する。
+///
+/// # Arguments
+///
+/// * `window_query` - プライマリウィンドウの情報を取得するクエリ。
+/// * `camera_query` - メインカメラとその座標変換情報を取得するクエリ。
+/// * `block_query` - すべてのブロックエンティティとその座標を取得するクエリ。
+/// * `selectable_query` - 選択可能なブロックのみを絞り込むクエリ。
+/// * `commands` - エンティティの生成・削除を行うコマンドバッファ。
+/// * `highlight_query` - 既存のハイライトエンティティを取得するクエリ。
+/// * `highlighted_block_query` - 現在ハイライトされているブロックを取得するクエリ。
+/// * `material_assets` - マテリアルアセットの管理リソース。
+/// * `meshes` - メッシュアセットの管理リソース。
+/// * `move_mode` - キツネの移動モード状態を保持するリソース。
 #[allow(clippy::too_many_arguments)]
 pub fn block_hover_highlight(
     window_query: Query<&Window, With<bevy::window::PrimaryWindow>>,
@@ -72,14 +106,12 @@ pub fn block_hover_highlight(
 
         let block_pos = block_transform.translation();
 
-        if let Some(distance) =
-            ray_box_intersection(&ray, block_pos, Vec3::splat(BLOCK_HALF_SIZE))
+        if let Some(distance) = ray_box_intersection(&ray, block_pos, Vec3::splat(BLOCK_HALF_SIZE))
+            && distance < closest_distance
         {
-            if distance < closest_distance {
-                closest_distance = distance;
-                hovering_block_entity = Some(entity);
-                block_position = Some(block_pos);
-            }
+            closest_distance = distance;
+            hovering_block_entity = Some(entity);
+            block_position = Some(block_pos);
         }
     }
 
@@ -143,7 +175,34 @@ pub fn block_hover_highlight(
     }
 }
 
-/// ブロッククリックを処理するシステム
+/// マウス左クリックによるブロックおよびキツネの操作を処理する。
+///
+/// このシステムは以下の複数の機能を統合して処理する：
+/// 1. アイテムスロットから選択したアイテムをブロックに設置
+/// 2. 移動モード中のキツネをブロックに設置
+/// 3. キツネをクリックしてアクションメニューを表示
+/// 4. ブロックのタイマーをリセット
+///
+/// クリック対象はレイキャストで判定し、ブロックとキツネの両方を対象とする。
+/// UI ボタンがクリックされた場合は処理をスキップする。
+///
+/// # Arguments
+///
+/// * `mouse_input` - マウスボタンの入力状態。
+/// * `window_query` - プライマリウィンドウの情報を取得するクエリ。
+/// * `camera_query` - メインカメラとその座標変換情報を取得するクエリ。
+/// * `block_query` - すべてのブロックエンティティとその座標を取得するクエリ。
+/// * `selectable_query` - 選択可能なブロックのみを絞り込むクエリ。
+/// * `fox_query` - キツネエンティティとその座標を取得するクエリ。
+/// * `timer_query` - タイマーコンポーネントを持つエンティティを取得するクエリ。
+/// * `feedback_text_query` - フィードバック用のテキスト UI を取得するクエリ。
+/// * `commands` - エンティティの生成・削除を行うコマンドバッファ。
+/// * `action_menu_query` - キツネのアクションメニュー UI を取得するクエリ。
+/// * `move_mode` - キツネの移動モード状態を保持するリソース。
+/// * `fox_transform_query` - キツネの座標変換を変更するクエリ。
+/// * `button_interaction_query` - UI ボタンのインタラクション状態を取得するクエリ。
+/// * `selected_slot` - 現在選択中のアイテムスロット情報を保持するリソース。
+/// * `item_slot_query` - すべてのアイテムスロットを取得するクエリ。
 #[allow(clippy::too_many_arguments)]
 pub fn block_click_handler(
     mouse_input: Res<ButtonInput<MouseButton>>,
@@ -200,9 +259,8 @@ pub fn block_click_handler(
 
         let block_pos = block_transform.translation();
 
-        if let Some(distance) =
-            ray_box_intersection(&ray, block_pos, Vec3::splat(BLOCK_HALF_SIZE))
-                .filter(|&distance| distance < closest_distance)
+        if let Some(distance) = ray_box_intersection(&ray, block_pos, Vec3::splat(BLOCK_HALF_SIZE))
+            .filter(|&distance| distance < closest_distance)
         {
             closest_distance = distance;
             closest_entity = Some(entity);
@@ -213,9 +271,8 @@ pub fn block_click_handler(
         for (entity, fox_transform) in fox_query.iter() {
             let fox_pos = fox_transform.translation();
 
-            if let Some(distance) =
-                ray_box_intersection(&ray, fox_pos, Vec3::splat(FOX_HALF_SIZE))
-                    .filter(|&distance| distance < closest_distance)
+            if let Some(distance) = ray_box_intersection(&ray, fox_pos, Vec3::splat(FOX_HALF_SIZE))
+                .filter(|&distance| distance < closest_distance)
             {
                 closest_distance = distance;
                 closest_entity = Some(entity);
@@ -228,61 +285,58 @@ pub fn block_click_handler(
     if let Some(clicked_entity) = closest_entity {
         if let Some(item_type) = &selected_slot.item_type
             && !is_fox
+            && let Some(slot_idx) = selected_slot.slot_index
         {
-            if let Some(slot_idx) = selected_slot.slot_index {
-                for mut slot in item_slot_query.iter_mut() {
-                    if slot.slot_index == slot_idx {
-                        slot.item = None;
-                        break;
-                    }
+            for mut slot in item_slot_query.iter_mut() {
+                if slot.slot_index == slot_idx {
+                    slot.item = None;
+                    break;
                 }
+            }
 
-                match item_type {
-                    ItemType::Fox => {
-                        if let Ok((fox_entity, _)) = fox_query.single()
-                            && let Ok(mut fox_transform) = fox_transform_query.get_mut(fox_entity)
-                        {
-                            if let Ok((_, block_transform)) = block_query.get(clicked_entity) {
-                                let block_pos = block_transform.translation();
-                                fox_transform.translation =
-                                    Vec3::new(block_pos.x, FOX_INITIAL_HEIGHT, block_pos.z);
-                            }
-                            commands.entity(fox_entity).insert(Visibility::Visible);
+            match item_type {
+                ItemType::Fox => {
+                    if let Ok((fox_entity, _)) = fox_query.single()
+                        && let Ok(mut fox_transform) = fox_transform_query.get_mut(fox_entity)
+                    {
+                        if let Ok((_, block_transform)) = block_query.get(clicked_entity) {
+                            let block_pos = block_transform.translation();
+                            fox_transform.translation =
+                                Vec3::new(block_pos.x, FOX_INITIAL_HEIGHT, block_pos.z);
+                        }
+                        commands.entity(fox_entity).insert(Visibility::Visible);
 
-                            if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
-                                feedback_text.0 = "アイテムを設置しました！".to_string();
-                            }
+                        if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                            feedback_text.0 = "アイテムを設置しました！".to_string();
                         }
                     }
                 }
-
-                selected_slot.slot_index = None;
-                selected_slot.item_type = None;
-                return;
             }
+
+            selected_slot.slot_index = None;
+            selected_slot.item_type = None;
+            return;
         }
 
-        if move_mode.is_active && move_mode.is_holding {
-            if !is_fox {
-                if let Some(fox_entity) = move_mode.fox_entity
-                    && let Ok(mut fox_transform) = fox_transform_query.get_mut(fox_entity)
-                {
-                    if let Ok((_, block_transform)) = block_query.get(clicked_entity) {
-                        let block_pos = block_transform.translation();
-                        fox_transform.translation =
-                            Vec3::new(block_pos.x, FOX_INITIAL_HEIGHT, block_pos.z);
-                    }
-
-                    if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
-                        feedback_text.0 = "キツネを設置しました！".to_string();
-                    }
+        if move_mode.is_active && move_mode.is_holding && !is_fox {
+            if let Some(fox_entity) = move_mode.fox_entity
+                && let Ok(mut fox_transform) = fox_transform_query.get_mut(fox_entity)
+            {
+                if let Ok((_, block_transform)) = block_query.get(clicked_entity) {
+                    let block_pos = block_transform.translation();
+                    fox_transform.translation =
+                        Vec3::new(block_pos.x, FOX_INITIAL_HEIGHT, block_pos.z);
                 }
 
-                move_mode.is_active = false;
-                move_mode.is_holding = false;
-                move_mode.fox_entity = None;
-                return;
+                if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                    feedback_text.0 = "キツネを設置しました！".to_string();
+                }
             }
+
+            move_mode.is_active = false;
+            move_mode.is_holding = false;
+            move_mode.fox_entity = None;
+            return;
         }
 
         if is_fox && !move_mode.is_active {
@@ -305,30 +359,39 @@ pub fn block_click_handler(
                 if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
                     feedback_text.0 = format!("{} clicked! Timer reset!", timer.name);
                 }
-            } else {
-                if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
-                    feedback_text.0 = "".to_string();
-                }
+            } else if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+                feedback_text.0 = "".to_string();
             }
         }
+    } else if move_mode.is_active && move_mode.is_holding {
+        if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+            feedback_text.0 = "選択可能なブロックにのみ設置できます！".to_string();
+        }
     } else {
-        if move_mode.is_active && move_mode.is_holding {
-            if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
-                feedback_text.0 = "選択可能なブロックにのみ設置できます！".to_string();
-            }
-        } else {
-            for menu_entity in action_menu_query.iter() {
-                commands.entity(menu_entity).despawn();
-            }
-            if selected_slot.item_type.is_some() {
-                selected_slot.slot_index = None;
-                selected_slot.item_type = None;
-            }
+        for menu_entity in action_menu_query.iter() {
+            commands.entity(menu_entity).despawn();
+        }
+        if selected_slot.item_type.is_some() {
+            selected_slot.slot_index = None;
+            selected_slot.item_type = None;
         }
     }
 }
 
-/// Foxアクションメニューをスポーンする関数
+/// キツネのアクションメニュー UI を生成する。
+///
+/// キツネがクリックされた際に呼び出され、キツネの3D位置を画面座標に変換して
+/// その近くに「Move」と「Box」の2つのボタンを持つメニューを表示する。
+///
+/// - **Move ボタン**: キツネを移動モードにして、別のブロックに設置可能にする。
+/// - **Box ボタン**: キツネをアイテムスロットに格納して非表示にする。
+///
+/// # Arguments
+///
+/// * `commands` - UI ノードやボタンなどのエンティティを生成するための [`Commands`]。
+/// * `fox_position` - キツネの3D ワールド座標。
+/// * `camera` - メニュー表示位置を計算するためのカメラ。
+/// * `camera_transform` - カメラのグローバル座標変換。
 fn spawn_fox_action_menu(
     commands: &mut Commands,
     fox_position: Vec3,
@@ -408,7 +471,26 @@ fn spawn_fox_action_menu(
         });
 }
 
-/// Foxアクションボタンのクリックを処理するシステム
+/// キツネのアクションメニューのボタンクリックを処理する。
+///
+/// アクションメニューの「Move」または「Box」ボタンがクリックされた際の処理を行う。
+///
+/// - **Move ボタン**: キツネを移動モードに切り替え、カーソルに追従させる。
+///   その後、ブロックをクリックすることでキツネを設置できる。
+/// - **Box ボタン**: キツネを空いているアイテムスロットに格納し、
+///   キツネを非表示にする。スロットが満杯の場合はエラーメッセージを表示。
+///
+/// ボタンクリック後はアクションメニューを自動的に閉じる。
+///
+/// # Arguments
+///
+/// * `interaction_query` - ボタンのインタラクション状態とボタン種類を取得するクエリ。
+/// * `feedback_text_query` - フィードバック用のテキスト UI を取得するクエリ。
+/// * `move_mode` - キツネの移動モード状態を保持するリソース。
+/// * `fox_query` - キツネエンティティを取得するクエリ。
+/// * `commands` - エンティティの削除（メニュー閉じる）などを行うコマンドバッファ。
+/// * `action_menu_query` - キツネのアクションメニュー UI を取得するクエリ。
+/// * `item_slot_query` - すべてのアイテムスロットを取得するクエリ。
 pub fn handle_fox_action_buttons(
     interaction_query: Query<(&Interaction, &FoxActionButton), Changed<Interaction>>,
     mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
@@ -428,7 +510,8 @@ pub fn handle_fox_action_buttons(
                         move_mode.is_active = true;
                         move_mode.is_holding = true;
                         move_mode.fox_entity = Some(fox_entity);
-                        feedback_text.0 = "移動モード: 移動先をクリックして設置してください".to_string();
+                        feedback_text.0 =
+                            "移動モード: 移動先をクリックして設置してください".to_string();
 
                         for menu_entity in action_menu_query.iter() {
                             commands.entity(menu_entity).despawn();
@@ -445,7 +528,8 @@ pub fn handle_fox_action_buttons(
                             if slot.item.is_none() {
                                 slot.item = Some(ItemType::Fox);
                                 commands.entity(fox_entity).insert(Visibility::Hidden);
-                                feedback_text.0 = "キツネをアイテムエリアに格納しました！".to_string();
+                                feedback_text.0 =
+                                    "キツネをアイテムエリアに格納しました！".to_string();
                                 stored = true;
                                 break;
                             }
@@ -465,7 +549,21 @@ pub fn handle_fox_action_buttons(
     }
 }
 
-/// カーソルに追従してキツネを移動させるシステム
+/// 移動モード中にキツネをカーソル位置に追従させる。
+///
+/// キツネが移動モード（`move_mode.is_active && move_mode.is_holding`）の場合、
+/// カーソル位置からレイキャストを行い、Y 座標が `FOX_INITIAL_HEIGHT` の平面との
+/// 交点にキツネを配置する。実際には少し浮かせて表示するため、
+/// `FOX_HOVER_HEIGHT` を加算した高さに設定する。
+///
+/// カーソルが画面外にある場合は処理をスキップする。
+///
+/// # Arguments
+///
+/// * `move_mode` - キツネの移動モード状態を保持するリソース。
+/// * `window_query` - プライマリウィンドウの情報を取得するクエリ。
+/// * `camera_query` - メインカメラとその座標変換情報を取得するクエリ。
+/// * `fox_transform_query` - キツネの座標変換を変更するクエリ。
 pub fn fox_follow_cursor(
     move_mode: Res<FoxMoveMode>,
     window_query: Query<&Window, With<bevy::window::PrimaryWindow>>,

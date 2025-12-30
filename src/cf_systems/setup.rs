@@ -153,7 +153,19 @@ fn spawn_ui(commands: &mut Commands, fox_icon: Handle<Image>) {
     spawn_item_area(commands, fox_icon);
 }
 
-/// アイテムエリアUIをスポーンする関数
+/// アイテムエリアの UI を生成する。
+///
+/// 画面下部中央にアイテムスロットのコンテナノードを作成し、
+/// 定数で定義されたスロット数分のボタン付きスロットと、その中に
+/// アイコン画像およびスロット番号のテキストを子要素として配置する。
+///
+/// 通常は [`spawn_ui`] から呼び出され、ゲーム開始時の UI セットアップの一部として
+/// 実行されることを想定している。
+///
+/// # Arguments
+///
+/// * `commands` - UI ノードやボタンなどのエンティティを生成するための [`Commands`]。
+/// * `fox_icon` - 各アイテムスロット内に表示するキツネアイコン画像の [`Handle<Image>`]。
 pub fn spawn_item_area(commands: &mut Commands, fox_icon: Handle<Image>) {
     commands
         .spawn((

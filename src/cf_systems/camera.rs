@@ -56,7 +56,8 @@ pub fn camera_drag_rotation(
                 let (current_yaw, current_pitch, current_roll) =
                     transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
 
-                let new_pitch = (current_pitch + pitch).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
+                let new_pitch =
+                    (current_pitch + pitch).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
 
                 transform.rotation = Quat::from_euler(
                     bevy::math::EulerRot::YXZ,
@@ -105,7 +106,8 @@ pub fn camera_keyboard_rotation(
         let (current_yaw, current_pitch, current_roll) =
             transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
 
-        let new_pitch = (current_pitch + pitch_delta).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
+        let new_pitch =
+            (current_pitch + pitch_delta).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
 
         transform.rotation = Quat::from_euler(
             bevy::math::EulerRot::YXZ,

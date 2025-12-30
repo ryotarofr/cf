@@ -1,15 +1,15 @@
 mod cf_mesh;
+mod cf_systems;
 mod cf_tool;
 mod components;
 mod constants;
 mod plugins;
 mod resources;
-mod systems;
 
 use bevy::prelude::*;
+use cf_systems::setup;
 use plugins::*;
 use resources::CameraSettings;
-use systems::setup;
 
 fn main() {
     App::new()
