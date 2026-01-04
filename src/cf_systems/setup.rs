@@ -50,6 +50,7 @@ pub fn setup(
     );
 
     spawn_fox(&mut commands, &asset_server);
+    spawn_rock(&mut commands, &asset_server);
     spawn_camera_and_light(&mut commands);
     spawn_ui(&mut commands, fox_icon);
 }
@@ -98,6 +99,13 @@ fn spawn_fox(commands: &mut Commands, asset_server: &AssetServer) {
             time: 0.0,
             name: "Fox".to_string(),
         },
+    ));
+}
+
+fn spawn_rock(commands: &mut Commands, asset_server: &AssetServer) {
+    commands.spawn((
+        SceneRoot(asset_server.load("animated/rock.glb#Scene0")),
+        Transform::from_xyz(32.0, 8.0, -32.0).with_scale(Vec3::splat(20.0)),
     ));
 }
 
