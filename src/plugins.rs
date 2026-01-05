@@ -56,6 +56,7 @@ impl Plugin for GameLogicPlugin {
                     cf_systems::block_click_handler,
                     cf_systems::handle_fox_action_buttons,
                     cf_systems::fox_follow_cursor,
+                    cf_systems::play_fox_animation,
                     cf_tool::timer::update_timers,
                     cf_tool::timer::update_timer_ui,
                 ),
