@@ -11,15 +11,21 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<MouseDragState>().add_systems(
-            Update,
-            (
-                cf_systems::camera_zoom,
-                cf_systems::camera_drag_rotation,
-                cf_systems::camera_keyboard_rotation,
-                cf_systems::camera_keyboard_pan,
-            ),
-        );
+        app.init_resource::<MouseDragState>()
+            .init_resource::<PossessionMode>()
+            .add_systems(
+                Update,
+                (
+                    cf_systems::camera_zoom,
+                    cf_systems::camera_drag_rotation,
+                    cf_systems::camera_keyboard_rotation,
+                    cf_systems::camera_keyboard_pan,
+                    // Possessionモードのシステムは順序が重要
+                    cf_systems::possession_camera_rotation
+                        .before(cf_systems::possession_camera_follow),
+                    cf_systems::possession_camera_follow,
+                ),
+            );
     }
 }
 
@@ -49,6 +55,8 @@ impl Plugin for GameLogicPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FoxMoveMode>()
             .init_resource::<SelectedItemSlot>()
+            .init_resource::<DashInputState>()
+            .init_resource::<cf_systems::FoxAnimationClips>()
             .add_systems(
                 Update,
                 (
@@ -56,6 +64,8 @@ impl Plugin for GameLogicPlugin {
                     cf_systems::block_click_handler,
                     cf_systems::handle_fox_action_buttons,
                     cf_systems::fox_follow_cursor,
+                    cf_systems::exit_possession_mode,
+                    cf_systems::fox_possession_movement,
                     cf_systems::play_fox_animation,
                     cf_tool::timer::update_timers,
                     cf_tool::timer::update_timer_ui,
