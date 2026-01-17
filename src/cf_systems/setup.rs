@@ -28,7 +28,7 @@ fn spawn_field(commands: &mut Commands, asset_server: &AssetServer) {
 
             let mut entity_commands = commands.spawn((
                 SceneRoot(asset_server.load("animated/GrassBlock.glb#Scene0")),
-                Transform::from_xyz(x_pos, 0.0, z_pos).with_scale(Vec3::splat(20.0)),
+                Transform::from_xyz(x_pos, 0.0, z_pos).with_scale(Vec3::splat(17.0)),
                 Block,
             ));
 
@@ -54,7 +54,7 @@ fn spawn_fox(commands: &mut Commands, asset_server: &AssetServer) {
 fn spawn_rock(commands: &mut Commands, asset_server: &AssetServer) {
     commands.spawn((
         SceneRoot(asset_server.load("animated/rock.glb#Scene0")),
-        Transform::from_xyz(32.0, 8.0, -32.0).with_scale(Vec3::splat(20.0)),
+        Transform::from_xyz(32.0, 8.0, -32.0).with_scale(Vec3::splat(18.0)),
     ));
 }
 
