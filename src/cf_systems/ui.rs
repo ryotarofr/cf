@@ -8,11 +8,19 @@ use crate::resources::*;
 pub fn toggle_settings_menu(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut settings_state: ResMut<SettingsMenuState>,
+    mut possession_mode: ResMut<crate::resources::PossessionMode>,
     mut commands: Commands,
     settings_menu_query: Query<Entity, With<SettingsMenu>>,
     current_settings: Res<CameraSettings>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Escape) {
+        // Possessionモード中の場合は、Possessionモードを終了
+        if possession_mode.is_active {
+            possession_mode.is_active = false;
+            possession_mode.fox_entity = None;
+            return;
+        }
+
         settings_state.is_open = !settings_state.is_open;
 
         if settings_state.is_open {

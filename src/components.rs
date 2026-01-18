@@ -85,6 +85,7 @@ pub struct ItemSlot {
 pub enum FoxActionButton {
     Move,
     Box,
+    Possession,
 }
 
 /// インタラクティブな設定UIボタンのコンポーネント

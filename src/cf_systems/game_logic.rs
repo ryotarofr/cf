@@ -468,6 +468,33 @@ fn spawn_fox_action_menu(
                         TextColor(Color::WHITE),
                     ));
                 });
+
+            // Possessionボタン
+            parent
+                .spawn((
+                    Button,
+                    Node {
+                        width: Val::Px(80.0),
+                        height: Val::Px(30.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.6, 0.3, 0.6)),
+                    BorderColor::all(Color::srgb(0.8, 0.5, 0.8)),
+                    FoxActionButton::Possession,
+                ))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Text::new("Possession"),
+                        TextFont {
+                            font_size: 12.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    ));
+                });
         });
 }
 
@@ -495,10 +522,12 @@ pub fn handle_fox_action_buttons(
     interaction_query: Query<(&Interaction, &FoxActionButton), Changed<Interaction>>,
     mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
     mut move_mode: ResMut<FoxMoveMode>,
+    mut possession_mode: ResMut<crate::resources::PossessionMode>,
     fox_query: Query<Entity, With<Fox>>,
     mut commands: Commands,
     action_menu_query: Query<Entity, With<FoxActionMenu>>,
     mut item_slot_query: Query<&mut ItemSlot>,
+    camera_query: Query<&Transform, With<MainCamera>>,
 ) {
     for (interaction, button_type) in interaction_query.iter() {
         if *interaction == Interaction::Pressed
@@ -538,6 +567,24 @@ pub fn handle_fox_action_buttons(
                         if !stored {
                             feedback_text.0 = "アイテムスロットがいっぱいです！".to_string();
                         }
+
+                        for menu_entity in action_menu_query.iter() {
+                            commands.entity(menu_entity).despawn();
+                        }
+                    }
+                }
+                FoxActionButton::Possession => {
+                    if let Ok(fox_entity) = fox_query.single() {
+                        // 現在のカメラ位置を保存
+                        if let Ok(camera_transform) = camera_query.single() {
+                            possession_mode.previous_camera_transform = Some(*camera_transform);
+                        }
+
+                        possession_mode.is_active = true;
+                        possession_mode.fox_entity = Some(fox_entity);
+                        possession_mode.camera_offset = Vec3::new(0.0, 2.0, -3.0);
+                        feedback_text.0 =
+                            "Possessionモード: WASDキーでキツネを操作できます (Escで解除)".to_string();
 
                         for menu_entity in action_menu_query.iter() {
                             commands.entity(menu_entity).despawn();
@@ -603,5 +650,139 @@ pub fn fox_follow_cursor(
             fox_transform.translation.z = intersection_point.z;
             fox_transform.translation.y = plane_y + FOX_HOVER_HEIGHT;
         }
+    }
+}
+
+/// Escキーで憑依モードを解除するシステム
+pub fn exit_possession_mode(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut possession_mode: ResMut<crate::resources::PossessionMode>,
+    mut camera_query: Query<&mut Transform, With<MainCamera>>,
+    mut feedback_text_query: Query<&mut Text, With<ClickFeedbackText>>,
+    mut dash_state: ResMut<crate::resources::DashInputState>,
+) {
+    if !possession_mode.is_active {
+        return;
+    }
+
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        // カメラを元の位置に戻す
+        if let Some(previous_transform) = possession_mode.previous_camera_transform {
+            if let Ok(mut camera_transform) = camera_query.single_mut() {
+                *camera_transform = previous_transform;
+            }
+        }
+
+        // Possessionモードを解除
+        possession_mode.is_active = false;
+        possession_mode.fox_entity = None;
+        possession_mode.previous_camera_transform = None;
+
+        // ダッシュ状態もリセット
+        dash_state.is_dashing = false;
+        dash_state.last_tap_time = None;
+        dash_state.last_key = None;
+
+        // フィードバックメッセージを表示
+        if let Ok(mut feedback_text) = feedback_text_query.single_mut() {
+            feedback_text.0 = "Possessionモードを解除しました".to_string();
+        }
+    }
+}
+
+/// Possessionモード時にWASDキーでキツネを移動させるシステム
+pub fn fox_possession_movement(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    possession_mode: Res<crate::resources::PossessionMode>,
+    mut fox_query: Query<&mut Transform, With<Fox>>,
+    camera_query: Query<&Transform, (With<MainCamera>, Without<Fox>)>,
+    time: Res<Time>,
+    mut dash_state: ResMut<crate::resources::DashInputState>,
+) {
+    if !possession_mode.is_active {
+        return;
+    }
+
+    let Some(fox_entity) = possession_mode.fox_entity else {
+        return;
+    };
+
+    let Ok(mut fox_transform) = fox_query.get_mut(fox_entity) else {
+        return;
+    };
+
+    let Ok(camera_transform) = camera_query.single() else {
+        return;
+    };
+
+    let current_time = time.elapsed_secs();
+
+    // ダブルタップ検出
+    let movement_keys = [KeyCode::KeyW, KeyCode::KeyS, KeyCode::KeyA, KeyCode::KeyD];
+
+    for key in movement_keys.iter() {
+        if keyboard_input.just_pressed(*key) {
+            if let Some(last_time) = dash_state.last_tap_time {
+                if let Some(last_key) = dash_state.last_key {
+                    // 同じキーが短時間に2回押された場合、ダッシュ開始
+                    if last_key == *key && (current_time - last_time) < dash_state.dash_timeout {
+                        dash_state.is_dashing = true;
+                    }
+                }
+            }
+            dash_state.last_tap_time = Some(current_time);
+            dash_state.last_key = Some(*key);
+        }
+    }
+
+    // いずれかのキーが離されたらダッシュ解除
+    if !keyboard_input.pressed(KeyCode::KeyW)
+        && !keyboard_input.pressed(KeyCode::KeyS)
+        && !keyboard_input.pressed(KeyCode::KeyA)
+        && !keyboard_input.pressed(KeyCode::KeyD)
+    {
+        dash_state.is_dashing = false;
+    }
+
+    let mut movement = Vec3::ZERO;
+    let base_speed = 15.0;
+    let dash_speed = 50.0;
+    let movement_speed = if dash_state.is_dashing {
+        dash_speed
+    } else {
+        base_speed
+    };
+
+    // カメラの向きを基準にした前方と右方向を計算（Y軸は無視）
+    let camera_forward = camera_transform.forward();
+    let forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize_or_zero();
+    let camera_right = camera_transform.right();
+    let right_xz = Vec3::new(camera_right.x, 0.0, camera_right.z).normalize_or_zero();
+
+    if keyboard_input.pressed(KeyCode::KeyW) {
+        movement += forward_xz;
+    }
+    if keyboard_input.pressed(KeyCode::KeyS) {
+        movement -= forward_xz;
+    }
+    if keyboard_input.pressed(KeyCode::KeyA) {
+        movement -= right_xz;
+    }
+    if keyboard_input.pressed(KeyCode::KeyD) {
+        movement += right_xz;
+    }
+
+    if movement != Vec3::ZERO {
+        movement = movement.normalize() * movement_speed * time.delta_secs();
+        fox_transform.translation += movement;
+
+        // キツネを移動方向に向ける（モデルの前後が逆なので180度回転を追加）
+        let target_rotation = Transform::IDENTITY
+            .looking_to(movement, Vec3::Y)
+            .rotation
+            .normalize();
+        // Y軸周りに180度回転させる
+        let correction = Quat::from_rotation_y(std::f32::consts::PI);
+        fox_transform.rotation = target_rotation * correction;
     }
 }
