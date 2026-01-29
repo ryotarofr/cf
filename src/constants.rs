@@ -38,7 +38,7 @@ pub const CAMERA_PITCH_LIMIT: f32 = 1.5;
 pub const FOX_INITIAL_HEIGHT: f32 = 8.0;
 
 /// Foxのスケール
-pub const FOX_SCALE: f32 = 0.2;
+pub const FOX_SCALE: f32 = 0.1;
 
 /// Foxのバウンディングボックスの半分のサイズ
 pub const FOX_HALF_SIZE: f32 = 5.0;

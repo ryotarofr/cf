@@ -24,6 +24,35 @@ pub struct FoxMoveMode {
     pub fox_entity: Option<Entity>,
 }
 
+/// Possession（憑依）モードの状態を追跡するリソース
+#[derive(Resource, Default)]
+pub struct PossessionMode {
+    pub is_active: bool,
+    pub fox_entity: Option<Entity>,
+    pub camera_offset: Vec3,
+    pub previous_camera_transform: Option<Transform>,
+}
+
+/// ダッシュ入力のダブルタップ検出用リソース
+#[derive(Resource)]
+pub struct DashInputState {
+    pub is_dashing: bool,
+    pub last_tap_time: Option<f32>,
+    pub last_key: Option<KeyCode>,
+    pub dash_timeout: f32,
+}
+
+impl Default for DashInputState {
+    fn default() -> Self {
+        Self {
+            is_dashing: false,
+            last_tap_time: None,
+            last_key: None,
+            dash_timeout: 0.3, // 300msの間にダブルタップ
+        }
+    }
+}
+
 /// 選択されたアイテムスロットを追跡するリソース
 #[derive(Resource, Default)]
 pub struct SelectedItemSlot {

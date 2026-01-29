@@ -1,65 +1,23 @@
 use bevy::prelude::*;
 
-use crate::cf_mesh;
 use crate::cf_tool;
 use crate::components::*;
 use crate::constants::*;
 
 /// ゲームのセットアップシステム
 #[allow(unused_doc_comments)]
-pub fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let fox_icon: Handle<Image> = asset_server.load("animated/Fox_img_512x512.png");
 
-    /// テクスチャ画像をロード
-    let normal_texture: Handle<Image> = asset_server.load("array_texture.png");
-
-    let selectable_material_handle = materials.add(StandardMaterial {
-        base_color_texture: Some(normal_texture.clone()),
-        base_color: Color::srgb(
-            SELECTABLE_BLOCK_COLOR.0,
-            SELECTABLE_BLOCK_COLOR.1,
-            SELECTABLE_BLOCK_COLOR.2,
-        ),
-        unlit: true,
-        ..default()
-    });
-
-    let non_selectable_material_handle = materials.add(StandardMaterial {
-        base_color_texture: Some(normal_texture.clone()),
-        base_color: Color::srgb(
-            NON_SELECTABLE_BLOCK_COLOR.0,
-            NON_SELECTABLE_BLOCK_COLOR.1,
-            NON_SELECTABLE_BLOCK_COLOR.2,
-        ),
-        unlit: true,
-        ..default()
-    });
-
-    let cube_mesh_handle: Handle<Mesh> = meshes.add(cf_mesh::field::create_cube_mesh());
-
-    spawn_field(
-        &mut commands,
-        &cube_mesh_handle,
-        &selectable_material_handle,
-        &non_selectable_material_handle,
-    );
+    spawn_field(&mut commands, &asset_server);
 
     spawn_fox(&mut commands, &asset_server);
+    spawn_rock(&mut commands, &asset_server);
     spawn_camera_and_light(&mut commands);
     spawn_ui(&mut commands, fox_icon);
 }
 
-fn spawn_field(
-    commands: &mut Commands,
-    cube_mesh_handle: &Handle<Mesh>,
-    selectable_material: &Handle<StandardMaterial>,
-    non_selectable_material: &Handle<StandardMaterial>,
-) {
+fn spawn_field(commands: &mut Commands, asset_server: &AssetServer) {
     for x in 0..FIELD_SIZE {
         for z in 0..FIELD_SIZE {
             let x_pos = (x as f32 - FIELD_SIZE as f32 / 2.0) * BLOCK_SPACING;
@@ -68,17 +26,9 @@ fn spawn_field(
             let is_selectable = (SELECTABLE_AREA_START..=SELECTABLE_AREA_END).contains(&x)
                 && (SELECTABLE_AREA_START..=SELECTABLE_AREA_END).contains(&z);
 
-            let material = if is_selectable {
-                selectable_material.clone()
-            } else {
-                non_selectable_material.clone()
-            };
-
             let mut entity_commands = commands.spawn((
-                Mesh3d(cube_mesh_handle.clone()),
-                MeshMaterial3d(material),
-                Transform::from_xyz(x_pos, 0.0, z_pos),
-                CustomUV,
+                SceneRoot(asset_server.load("animated/GrassBlock.glb#Scene0")),
+                Transform::from_xyz(x_pos, 0.0, z_pos).with_scale(Vec3::splat(17.0)),
                 Block,
             ));
 
@@ -98,6 +48,13 @@ fn spawn_fox(commands: &mut Commands, asset_server: &AssetServer) {
             time: 0.0,
             name: "Fox".to_string(),
         },
+    ));
+}
+
+fn spawn_rock(commands: &mut Commands, asset_server: &AssetServer) {
+    commands.spawn((
+        SceneRoot(asset_server.load("animated/rock.glb#Scene0")),
+        Transform::from_xyz(32.0, 8.0, -32.0).with_scale(Vec3::splat(18.0)),
     ));
 }
 
