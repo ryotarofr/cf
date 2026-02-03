@@ -1,2 +1,3 @@
 # craft_farm
-unityは甘え
+防衛戦でもいいかも
+-> NPC からもらを守る
