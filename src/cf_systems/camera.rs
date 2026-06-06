@@ -3,6 +3,7 @@ use bevy::{input::mouse::MouseWheel, prelude::*};
 use crate::components::{Fox, MainCamera};
 use crate::constants::CAMERA_PITCH_LIMIT;
 use crate::resources::{CameraSettings, FoxMoveMode, MouseDragState, PossessionMode};
+use crate::traits::{camera_relative_movement, CameraRotation};
 
 /// マウスホイールでカメラのズームを処理するシステム（フリーカメラ - 前後移動）
 pub fn camera_zoom(
@@ -57,21 +58,13 @@ pub fn camera_drag_rotation(
             let delta = cursor_position - last_pos;
 
             if let Ok(mut transform) = camera_query.single_mut() {
-                let yaw = -delta.x * settings.mouse_sensitivity;
-                let pitch = -delta.y * settings.mouse_sensitivity;
-
-                let (current_yaw, current_pitch, current_roll) =
-                    transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-
-                let new_pitch =
-                    (current_pitch + pitch).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
-
-                transform.rotation = Quat::from_euler(
-                    bevy::math::EulerRot::YXZ,
-                    current_yaw + yaw,
-                    new_pitch,
-                    current_roll,
+                let rotation = CameraRotation::from_drag(
+                    delta,
+                    settings.mouse_sensitivity,
+                    &transform,
+                    CAMERA_PITCH_LIMIT,
                 );
+                transform.rotation = rotation.to_quat();
             }
         }
 
@@ -116,18 +109,13 @@ pub fn camera_keyboard_rotation(
     }
 
     if yaw_delta != 0.0 || pitch_delta != 0.0 {
-        let (current_yaw, current_pitch, current_roll) =
-            transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-
-        let new_pitch =
-            (current_pitch + pitch_delta).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
-
-        transform.rotation = Quat::from_euler(
-            bevy::math::EulerRot::YXZ,
-            current_yaw + yaw_delta,
-            new_pitch,
-            current_roll,
+        let rotation = CameraRotation::from_keyboard(
+            yaw_delta,
+            pitch_delta,
+            &transform,
+            CAMERA_PITCH_LIMIT,
         );
+        transform.rotation = rotation.to_quat();
     }
 }
 
@@ -148,11 +136,7 @@ pub fn camera_keyboard_pan(
     };
 
     let mut movement = Vec3::ZERO;
-
-    let forward = transform.forward();
-    let forward_xz = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
-    let right = transform.right();
-    let right_xz = Vec3::new(right.x, 0.0, right.z).normalize_or_zero();
+    let (forward_xz, right_xz) = camera_relative_movement(&transform);
 
     if keyboard_input.pressed(KeyCode::KeyW) {
         movement += forward_xz * settings.movement_speed;
@@ -244,21 +228,13 @@ pub fn possession_camera_rotation(
             let delta = cursor_position - last_pos;
 
             if let Ok(mut transform) = camera_query.single_mut() {
-                let yaw = -delta.x * settings.mouse_sensitivity;
-                let pitch = -delta.y * settings.mouse_sensitivity;
-
-                let (current_yaw, current_pitch, current_roll) =
-                    transform.rotation.to_euler(bevy::math::EulerRot::YXZ);
-
-                let new_pitch =
-                    (current_pitch + pitch).clamp(-CAMERA_PITCH_LIMIT, CAMERA_PITCH_LIMIT);
-
-                transform.rotation = Quat::from_euler(
-                    bevy::math::EulerRot::YXZ,
-                    current_yaw + yaw,
-                    new_pitch,
-                    current_roll,
+                let rotation = CameraRotation::from_drag(
+                    delta,
+                    settings.mouse_sensitivity,
+                    &transform,
+                    CAMERA_PITCH_LIMIT,
                 );
+                transform.rotation = rotation.to_quat();
             }
         }
 

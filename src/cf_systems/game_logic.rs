@@ -4,11 +4,11 @@ use crate::cf_tool;
 use crate::components::*;
 use crate::constants::*;
 use crate::resources::*;
+use crate::traits::{camera_relative_movement, Aabb, RayIntersectable};
 
 /// レイとボックス（AABB）の交差判定を行う。
 ///
-/// 3D 空間上のレイが軸に平行な境界ボックス（AABB）と交差するかを判定し、
-/// 交差する場合はレイの原点から交点までの距離を返す。
+/// 後方互換性のためのヘルパー関数。内部では`Aabb`の`RayIntersectable`実装を使用。
 ///
 /// # Arguments
 ///
@@ -20,23 +20,9 @@ use crate::resources::*;
 ///
 /// * `Some(f32)` - レイがボックスと交差する場合、レイの原点から交点までの距離。
 /// * `None` - レイがボックスと交差しない場合。
+#[inline]
 pub fn ray_box_intersection(ray: &Ray3d, box_center: Vec3, half_extents: Vec3) -> Option<f32> {
-    let min = box_center - half_extents;
-    let max = box_center + half_extents;
-
-    let ray_dir = *ray.direction;
-    let inv_dir = Vec3::ONE / ray_dir;
-    let t_min = (min - ray.origin) * inv_dir;
-    let t_max = (max - ray.origin) * inv_dir;
-
-    let t_enter = t_min.min(t_max).max_element();
-    let t_exit = t_min.max(t_max).min_element();
-
-    if t_enter <= t_exit && t_exit >= 0.0 {
-        Some(t_enter.max(0.0))
-    } else {
-        None
-    }
+    Aabb::new(box_center, half_extents).ray_intersect(ray)
 }
 
 /// マウスカーソルがブロックの上にホバーした際にハイライト表示を行う。
@@ -415,86 +401,32 @@ fn spawn_fox_action_menu(
             FoxActionMenu,
         ))
         .with_children(|parent| {
-            // Moveボタン
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(55.0),
-                        height: Val::Px(30.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.3, 0.5, 0.7)),
-                    BorderColor::all(Color::srgb(0.5, 0.7, 0.9)),
-                    FoxActionButton::Move,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("Move"),
-                        TextFont {
-                            font_size: 14.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
+            spawn_button!(parent, {
+                size: (55.0, 30.0),
+                text: "Move",
+                font_size: 14.0,
+                bg_color: (0.3, 0.5, 0.7),
+                border_color: (0.5, 0.7, 0.9),
+                component: FoxActionButton::Move,
+            });
 
-            // Boxボタン
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(55.0),
-                        height: Val::Px(30.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.5, 0.4, 0.3)),
-                    BorderColor::all(Color::srgb(0.7, 0.6, 0.5)),
-                    FoxActionButton::Box,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("Box"),
-                        TextFont {
-                            font_size: 14.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
+            spawn_button!(parent, {
+                size: (55.0, 30.0),
+                text: "Box",
+                font_size: 14.0,
+                bg_color: (0.5, 0.4, 0.3),
+                border_color: (0.7, 0.6, 0.5),
+                component: FoxActionButton::Box,
+            });
 
-            // Possessionボタン
-            parent
-                .spawn((
-                    Button,
-                    Node {
-                        width: Val::Px(80.0),
-                        height: Val::Px(30.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.6, 0.3, 0.6)),
-                    BorderColor::all(Color::srgb(0.8, 0.5, 0.8)),
-                    FoxActionButton::Possession,
-                ))
-                .with_children(|parent| {
-                    parent.spawn((
-                        Text::new("Possession"),
-                        TextFont {
-                            font_size: 12.0,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-                });
+            spawn_button!(parent, {
+                size: (80.0, 30.0),
+                text: "Possession",
+                font_size: 12.0,
+                bg_color: (0.6, 0.3, 0.6),
+                border_color: (0.8, 0.5, 0.8),
+                component: FoxActionButton::Possession,
+            });
         });
 }
 
@@ -754,10 +686,7 @@ pub fn fox_possession_movement(
     };
 
     // カメラの向きを基準にした前方と右方向を計算（Y軸は無視）
-    let camera_forward = camera_transform.forward();
-    let forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize_or_zero();
-    let camera_right = camera_transform.right();
-    let right_xz = Vec3::new(camera_right.x, 0.0, camera_right.z).normalize_or_zero();
+    let (forward_xz, right_xz) = camera_relative_movement(camera_transform);
 
     if keyboard_input.pressed(KeyCode::KeyW) {
         movement += forward_xz;

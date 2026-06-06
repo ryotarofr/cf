@@ -64,7 +64,9 @@ pub fn play_fox_animation(
             let mut anim_state = if let Ok(state) = animation_state_query.get_mut(fox_entity) {
                 state
             } else {
-                commands.entity(fox_entity).insert(FoxAnimationState::default());
+                commands
+                    .entity(fox_entity)
+                    .insert(FoxAnimationState::default());
                 continue;
             };
 

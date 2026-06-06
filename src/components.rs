@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::traits::Storable;
+
 // ========================================
 // Marker Components
 // ========================================
@@ -71,6 +73,20 @@ pub struct RainDrop {
 #[derive(Clone, Debug)]
 pub enum ItemType {
     Fox,
+}
+
+impl Storable for ItemType {
+    fn display_name(&self) -> &'static str {
+        match self {
+            ItemType::Fox => "キツネ",
+        }
+    }
+
+    fn icon_path(&self) -> &'static str {
+        match self {
+            ItemType::Fox => "animated/Fox_img_512x512.png",
+        }
+    }
 }
 
 /// 個別のアイテムスロットのマーカーコンポーネント

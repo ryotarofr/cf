@@ -1,3 +1,5 @@
+#[macro_use]
+mod macros;
 mod cf_mesh;
 mod cf_systems;
 mod cf_tool;
@@ -5,6 +7,7 @@ mod components;
 mod constants;
 mod plugins;
 mod resources;
+mod traits;
 
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;

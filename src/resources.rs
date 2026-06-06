@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::components::ItemType;
+use crate::traits::GameMode;
 
 // ========================================
 // Game State Resources
@@ -24,6 +25,30 @@ pub struct FoxMoveMode {
     pub fox_entity: Option<Entity>,
 }
 
+impl GameMode for FoxMoveMode {
+    fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    fn activate(&mut self) {
+        self.is_active = true;
+    }
+
+    fn deactivate(&mut self) {
+        self.is_active = false;
+        self.is_holding = false;
+        self.fox_entity = None;
+    }
+
+    fn allows_camera_control(&self) -> bool {
+        !self.is_active
+    }
+
+    fn allows_wasd_input(&self) -> bool {
+        !self.is_active
+    }
+}
+
 /// Possession（憑依）モードの状態を追跡するリソース
 #[derive(Resource, Default)]
 pub struct PossessionMode {
@@ -31,6 +56,32 @@ pub struct PossessionMode {
     pub fox_entity: Option<Entity>,
     pub camera_offset: Vec3,
     pub previous_camera_transform: Option<Transform>,
+}
+
+impl GameMode for PossessionMode {
+    fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    fn activate(&mut self) {
+        self.is_active = true;
+    }
+
+    fn deactivate(&mut self) {
+        self.is_active = false;
+        self.fox_entity = None;
+        self.previous_camera_transform = None;
+    }
+
+    fn allows_camera_control(&self) -> bool {
+        // Possessionモードでは専用のカメラ操作を使用
+        self.is_active
+    }
+
+    fn allows_wasd_input(&self) -> bool {
+        // Possessionモードではキツネの移動にWASDを使用
+        self.is_active
+    }
 }
 
 /// ダッシュ入力のダブルタップ検出用リソース

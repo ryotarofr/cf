@@ -178,7 +178,7 @@ pub fn handle_item_slot_click(
     }
 }
 
-/// 設定メニューUIをスポーンする関数（元のmain.rsから移植、インライン展開版）
+/// 設定メニューUIをスポーンする関数（マクロを使用してリファクタリング）
 fn spawn_settings_menu(commands: &mut Commands, settings: &CameraSettings) {
     commands
         .spawn((
@@ -210,61 +210,48 @@ fn spawn_settings_menu(commands: &mut Commands, settings: &CameraSettings) {
                     // タイトル
                     parent.spawn((
                         Text::new("Settings"),
-                        TextFont {
-                            font_size: 32.0,
-                            ..default()
-                        },
+                        TextFont { font_size: 32.0, ..default() },
                         TextColor(Color::WHITE),
                     ));
 
                     // カメラ設定セクション
                     parent.spawn((
                         Text::new("Camera Settings"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
-                        },
+                        TextFont { font_size: 24.0, ..default() },
                         TextColor(Color::srgb(0.8, 0.8, 0.8)),
                     ));
 
-                    // マウス感度設定行
-                    parent.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, width: Val::Percent(100.0), column_gap: Val::Px(10.0), ..default() }).with_children(|parent| {
-                        parent.spawn((Text::new(format!("Mouse Sensitivity: {:.3}", settings.mouse_sensitivity)), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE), SettingValueText::MouseSensitivity));
-                        parent.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }).with_children(|parent| {
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::MouseSensitivityDown)).with_children(|p| { p.spawn((Text::new("-"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::MouseSensitivityUp)).with_children(|p| { p.spawn((Text::new("+"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                        });
+                    // 設定行をマクロで生成
+                    spawn_setting_row!(parent, {
+                        label: format!("Mouse Sensitivity: {:.3}", settings.mouse_sensitivity),
+                        value_type: SettingValueText::MouseSensitivity,
+                        down_button: SettingButton::MouseSensitivityDown,
+                        up_button: SettingButton::MouseSensitivityUp,
                     });
 
-                    parent.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, width: Val::Percent(100.0), column_gap: Val::Px(10.0), ..default() }).with_children(|parent| {
-                        parent.spawn((Text::new(format!("Keyboard Sensitivity: {:.2}", settings.keyboard_sensitivity)), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE), SettingValueText::KeyboardSensitivity));
-                        parent.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }).with_children(|parent| {
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::KeyboardSensitivityDown)).with_children(|p| { p.spawn((Text::new("-"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::KeyboardSensitivityUp)).with_children(|p| { p.spawn((Text::new("+"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                        });
+                    spawn_setting_row!(parent, {
+                        label: format!("Keyboard Sensitivity: {:.2}", settings.keyboard_sensitivity),
+                        value_type: SettingValueText::KeyboardSensitivity,
+                        down_button: SettingButton::KeyboardSensitivityDown,
+                        up_button: SettingButton::KeyboardSensitivityUp,
                     });
 
-                    parent.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, width: Val::Percent(100.0), column_gap: Val::Px(10.0), ..default() }).with_children(|parent| {
-                        parent.spawn((Text::new(format!("Movement Speed: {:.1}", settings.movement_speed)), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE), SettingValueText::MovementSpeed));
-                        parent.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }).with_children(|parent| {
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::MovementSpeedDown)).with_children(|p| { p.spawn((Text::new("-"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::MovementSpeedUp)).with_children(|p| { p.spawn((Text::new("+"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                        });
+                    spawn_setting_row!(parent, {
+                        label: format!("Movement Speed: {:.1}", settings.movement_speed),
+                        value_type: SettingValueText::MovementSpeed,
+                        down_button: SettingButton::MovementSpeedDown,
+                        up_button: SettingButton::MovementSpeedUp,
                     });
 
-                    parent.spawn(Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, width: Val::Percent(100.0), column_gap: Val::Px(10.0), ..default() }).with_children(|parent| {
-                        parent.spawn((Text::new(format!("Zoom Speed: {:.1}", settings.zoom_speed)), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE), SettingValueText::ZoomSpeed));
-                        parent.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }).with_children(|parent| {
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::ZoomSpeedDown)).with_children(|p| { p.spawn((Text::new("-"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                            parent.spawn((Button, Node { width: Val::Px(30.0), height: Val::Px(30.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.4, 0.4, 0.4)), SettingButton::ZoomSpeedUp)).with_children(|p| { p.spawn((Text::new("+"), TextFont { font_size: 20.0, ..default() }, TextColor(Color::WHITE))); });
-                        });
+                    spawn_setting_row!(parent, {
+                        label: format!("Zoom Speed: {:.1}", settings.zoom_speed),
+                        value_type: SettingValueText::ZoomSpeed,
+                        down_button: SettingButton::ZoomSpeedDown,
+                        up_button: SettingButton::ZoomSpeedUp,
                     });
 
                     // スペーサー
-                    parent.spawn(Node {
-                        height: Val::Px(20.0),
-                        ..default()
-                    });
+                    parent.spawn(Node { height: Val::Px(20.0), ..default() });
 
                     // 保存/読み込みボタン
                     parent.spawn(Node {
@@ -273,35 +260,37 @@ fn spawn_settings_menu(commands: &mut Commands, settings: &CameraSettings) {
                         column_gap: Val::Px(10.0),
                         width: Val::Percent(100.0),
                         ..default()
-                    }).with_children(|parent| {
-                        parent.spawn((Button, Node { width: Val::Px(120.0), height: Val::Px(40.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.2, 0.6, 0.2)), SettingButton::SaveSettings)).with_children(|parent| {
-                            parent.spawn((Text::new("Save Settings"), TextFont { font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+                    }).with_children(|buttons| {
+                        spawn_button!(buttons, {
+                            size: (120.0, 40.0),
+                            text: "Save Settings",
+                            font_size: 18.0,
+                            bg_color: (0.2, 0.6, 0.2),
+                            border_color: (0.3, 0.7, 0.3),
+                            component: SettingButton::SaveSettings,
                         });
-                        parent.spawn((Button, Node { width: Val::Px(120.0), height: Val::Px(40.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, BackgroundColor(Color::srgb(0.2, 0.4, 0.7)), SettingButton::LoadSettings)).with_children(|parent| {
-                            parent.spawn((Text::new("Load Settings"), TextFont { font_size: 18.0, ..default() }, TextColor(Color::WHITE)));
+
+                        spawn_button!(buttons, {
+                            size: (120.0, 40.0),
+                            text: "Load Settings",
+                            font_size: 18.0,
+                            bg_color: (0.2, 0.4, 0.7),
+                            border_color: (0.3, 0.5, 0.8),
+                            component: SettingButton::LoadSettings,
                         });
                     });
 
-                    parent.spawn(Node {
-                        height: Val::Px(10.0),
-                        ..default()
-                    });
+                    parent.spawn(Node { height: Val::Px(10.0), ..default() });
 
                     parent.spawn((
                         Text::new("Controls"),
-                        TextFont {
-                            font_size: 24.0,
-                            ..default()
-                        },
+                        TextFont { font_size: 24.0, ..default() },
                         TextColor(Color::srgb(0.8, 0.8, 0.8)),
                     ));
 
                     parent.spawn((
                         Text::new("WASD - Move\nArrows - Rotate\nMouse Drag - Rotate\nWheel - Zoom\nESC - Toggle"),
-                        TextFont {
-                            font_size: 16.0,
-                            ..default()
-                        },
+                        TextFont { font_size: 16.0, ..default() },
                         TextColor(Color::WHITE),
                     ));
 
@@ -313,13 +302,10 @@ fn spawn_settings_menu(commands: &mut Commands, settings: &CameraSettings) {
                             justify_content: JustifyContent::Center,
                             ..default()
                         })
-                        .with_children(|parent| {
-                            parent.spawn((
+                        .with_children(|close| {
+                            close.spawn((
                                 Text::new("Press ESC to close"),
-                                TextFont {
-                                    font_size: 16.0,
-                                    ..default()
-                                },
+                                TextFont { font_size: 16.0, ..default() },
                                 TextColor(Color::srgb(0.6, 0.6, 0.6)),
                             ));
                         });
